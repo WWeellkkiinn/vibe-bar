@@ -87,26 +87,27 @@ echo '{"session_id":"s1","hook_event_name":"Stop","cwd":"C:/dev/myproject"}' | p
 Claude Code → src/hook.py → %LOCALAPPDATA%\VibeIsland\state.json → src/ui_qml.py（250ms 轮询）
 ```
 
-| 文件 | 职责 |
-|---|---|
-| `src/hook.py` | Hook 入口，读取 stdin JSON，原子写入 state.json |
-| `src/ui_qml.py` | 主进程，QApplication 生命周期、窗口定位、worker 线程 |
-| `src/island.qml` | QML UI，收起/展开动画、会话卡片、拖拽排序 |
-| `src/models.py` | SessionsModel（列表模型）+ IslandBridge（Python↔QML 桥接） |
-| `src/win32.py` | Win32 绑定，HWND、DWM、SetWindowRgn、显示器几何、窗口切换 |
-| `install.py` | 一次性安装脚本，写入 .python-path + 注入 hooks |
+```
+vibe-island/
+├── src/
+│   ├── hook.py       # Hook 入口 — 读取 stdin JSON，写入 state.json
+│   ├── ui_qml.py     # 主进程 — 窗口、worker 线程、state 消费
+│   ├── island.qml    # QML UI — 动画、会话卡片、拖拽排序
+│   ├── models.py     # SessionsModel + IslandBridge（Python ↔ QML）
+│   └── win32.py      # Win32 绑定 — HWND、DWM、SetWindowRgn、显示器
+├── install.py        # 一次性安装 — 写入 .python-path + 注入 hooks
+├── vibeisland.vbs    # 启动器 — 读取 .python-path，静默启动 ui_qml.py
+└── .python-path      # （gitignored）本机 Python 路径
+```
 
-### 关键约束
+## 未来计划
 
-- **幽灵墙**：QML 透明区域无法穿透鼠标到 Explorer（跨进程，`HTTRANSPARENT` 无效）。唯一可靠方案是 `SetWindowRgn`，限制 HWND 命中测试区域到 island 像素范围。
-- **DWM 闪烁**：窗口大小永不改变，只更新 `SetWindowRgn`。`SetWindowPos` 会触发 DWM 重新合成，产生一帧透底闪烁。
-- **拖拽稳定性**：`dragComp`/`dragSlot` 存在 ListView 级别，不在 delegate 上——delegate 可能被 `beginMoveRows` 重建。
-
-## 已知限制
-
-- **后台任务完成检测**：Claude Code 没有在父会话侧可靠触发的"后台代理完成"信号，蓝点通过超时（10 分钟）或 `PostToolUse` 清除。
-- **Codex CLI**：作为独立进程运行，不触发 Claude Code hooks，无法追踪其生命周期。
+- [ ] **Codex CLI 支持** — Codex 作为独立进程运行，不经过 Claude Code hook 系统。追踪其生命周期是计划中的后续功能。
 
 ## 许可证
 
 MIT — 见 [LICENSE](LICENSE)。
+
+---
+
+感谢使用 Vibe Island！如果它让你的 Claude Code 工作流更顺手，欢迎点个 ⭐ 支持一下。

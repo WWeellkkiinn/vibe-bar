@@ -89,20 +89,18 @@ State is written to `%LOCALAPPDATA%\VibeIsland\state.json`.
 Claude Code → src/hook.py → %LOCALAPPDATA%\VibeIsland\state.json → src/ui_qml.py (250ms poll)
 ```
 
-| File | Role |
-|---|---|
-| `src/hook.py` | Hook entry point — reads stdin JSON, atomically writes state.json |
-| `src/ui_qml.py` | Main process — QApplication lifecycle, window positioning, worker thread |
-| `src/island.qml` | QML UI — collapse/expand animation, session cards, drag-to-reorder |
-| `src/models.py` | `SessionsModel` (QAbstractListModel) + `IslandBridge` (Python↔QML bridge) |
-| `src/win32.py` | Win32 bindings — HWND, DWM, SetWindowRgn, monitor geometry, window focus |
-| `install.py` | One-time setup — writes `.python-path` + injects Claude Code hooks |
-
-### Key constraints
-
-- **Ghost wall**: QML transparent areas don't pass clicks to Explorer (cross-process, `HTTRANSPARENT` doesn't work). `SetWindowRgn` is the only reliable fix — it restricts the HWND hit-test region to the visible island pixels.
-- **DWM flicker**: Window size never changes; only `SetWindowRgn` updates. `SetWindowPos` triggers DWM recomposition causing a one-frame flash.
-- **Drag stability**: `dragComp`/`dragSlot` live on the `ListView`, not the delegate — delegates can be recreated by `beginMoveRows`.
+```
+vibe-island/
+├── src/
+│   ├── hook.py       # Hook entry point — reads stdin JSON, writes state.json
+│   ├── ui_qml.py     # Main process — window, worker thread, state consumption
+│   ├── island.qml    # QML UI — animation, session cards, drag-to-reorder
+│   ├── models.py     # SessionsModel + IslandBridge (Python ↔ QML)
+│   └── win32.py      # Win32 bindings — HWND, DWM, SetWindowRgn, monitor
+├── install.py        # One-time setup — writes .python-path + injects hooks
+├── vibeisland.vbs    # Launcher — reads .python-path, starts ui_qml.py silently
+└── .python-path      # (gitignored) your local Python executable path
+```
 
 ## Development
 
@@ -121,12 +119,15 @@ Get-Process pythonw -ErrorAction SilentlyContinue | Stop-Process -Force
 cscript.exe vibeisland.vbs
 ```
 
-## Known limitations
+## Roadmap
 
-- **Background task completion**: Claude Code has no reliable hook that fires when a background agent finishes in the parent session. The blue dot clears via a stale timeout (10 min) or `PostToolUse`.
-- **Codex CLI**: Runs as a separate process, does not trigger Claude Code hooks — its lifecycle is not tracked.
+- [ ] **Codex CLI support** — Codex runs as a separate process outside the Claude Code hook system. Tracking its lifecycle is a planned future addition.
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+Thanks for checking out Vibe Island! If it makes your Claude Code workflow a little nicer, a ⭐ on GitHub goes a long way.
 
