@@ -123,6 +123,10 @@ cscript.exe vibeisland.vbs
 
 - [ ] **Codex CLI support** — Codex runs as a separate process outside the Claude Code hook system. Tracking its lifecycle is a planned future addition.
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=WWeellkkiinn/vibe-island&type=Date)](https://star-history.com/#WWeellkkiinn/vibe-island&Date)
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
