@@ -28,7 +28,7 @@ Hover to expand — see which projects are running, what was last asked, and how
 
 ```powershell
 # 1. Clone
-git clone https://github.com/your-username/vibe-island.git
+git clone https://github.com/WWeellkkiinn/vibe-island.git
 cd vibe-island
 
 # 2. Install dependency
