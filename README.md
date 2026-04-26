@@ -34,7 +34,7 @@ cd vibe-island
 # 2. Install dependency
 pip install -r requirements.txt
 
-# 3. One-time setup (generates vibeisland.vbs + injects Claude Code hooks)
+# 3. One-time setup (writes .python-path + injects Claude Code hooks)
 python install.py
 
 # 4. Launch
@@ -56,11 +56,14 @@ To quit: **right-click double-click** anywhere on the island.
 |---|---|
 | `SessionStart` | Register session, detect primary vs subagent |
 | `UserPromptSubmit` | Mark session as running, record prompt |
-| `Stop` | Mark session as idle |
+| `Stop` / `StopFailure` | Mark session as idle |
 | `PreToolUse` | Detect Bash tool activity (blue dot) |
-| `PostToolUse` | Clear Bash activity flag |
+| `PostToolUse` / `PostToolUseFailure` | Clear Bash activity flag |
+| `PermissionRequest` / `Notification` | Red dot — needs attention |
+| `PermissionDenied` | Clear attention flag |
+| `SubagentStart` / `SubagentStop` | Track background agent count (blue dot) |
 
-> **Note:** `install.py` is idempotent — re-running it refreshes the VBS and hook paths safely without duplicating entries.
+> **Note:** `install.py` is idempotent — re-running it refreshes hook paths safely without duplicating entries.
 
 > **If you already have other hooks** for these events, `install.py` preserves them and only replaces the Vibe Island entry.
 

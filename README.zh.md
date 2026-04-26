@@ -54,9 +54,12 @@ python install.py
 |---|---|
 | `SessionStart` | 注册会话，判断主会话 vs 子代理 |
 | `UserPromptSubmit` | 标记运行中，记录提示词 |
-| `Stop` | 标记空闲 |
+| `Stop` / `StopFailure` | 标记空闲 |
 | `PreToolUse` | 检测 Bash 工具活动（蓝点） |
-| `PostToolUse` | 清除 Bash 活动标记 |
+| `PostToolUse` / `PostToolUseFailure` | 清除 Bash 活动标记 |
+| `PermissionRequest` / `Notification` | 红点，需要关注 |
+| `PermissionDenied` | 清除关注标记 |
+| `SubagentStart` / `SubagentStop` | 追踪后台代理数量（蓝点） |
 
 > `install.py` 幂等，重复运行安全，不会重复添加 hook 条目。
 

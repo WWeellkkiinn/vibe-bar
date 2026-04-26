@@ -26,11 +26,18 @@ PYTHON_PATH_FILE = REPO_DIR / ".python-path"
 HOOK_SCRIPT = REPO_DIR / "src" / "hook.py"
 
 HOOK_EVENTS = {
-    "SessionStart": {"matcher": "startup|resume"},
-    "UserPromptSubmit": {},
-    "Stop": {},
-    "PreToolUse": {},
-    "PostToolUse": {},
+    "SessionStart":      {"matcher": "startup|resume"},
+    "UserPromptSubmit":  {},
+    "Stop":              {},
+    "StopFailure":       {},
+    "PreToolUse":        {},
+    "PostToolUse":       {},
+    "PostToolUseFailure":{},
+    "PermissionRequest": {},
+    "PermissionDenied":  {},
+    "Notification":      {},
+    "SubagentStart":     {},
+    "SubagentStop":      {},
 }
 
 _SENTINEL = ("VibeIsland", "vibeisland", "hook.py")
@@ -70,7 +77,7 @@ def inject_hooks(python_path: str) -> None:
     # Claude Code runs hooks via bash — use forward slashes so paths survive
     py = str(python_path).replace("\\", "/")
     hs = str(HOOK_SCRIPT).replace("\\", "/")
-    hook_cmd = f"{py} {hs}"
+    hook_cmd = f'"{py}" "{hs}"'
 
     for event, extra in HOOK_EVENTS.items():
         existing = hooks_root.get(event, [])
