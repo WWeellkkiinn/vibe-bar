@@ -1,5 +1,7 @@
 # Vibe Island
 
+English | [中文](README.zh.md)
+
 A Dynamic Island–style floating bar for Windows that shows all your Claude Code sessions at a glance.
 
 Hover to expand — see which projects are running, what was last asked, and how long ago. Double-click a card to jump to that VS Code window. Drag cards to reorder.
@@ -47,7 +49,7 @@ To quit: **right-click double-click** anywhere on the island.
 
 1. Detects your Python installation (prefers `pythonw.exe` for no-console launch)
 2. Creates `%LOCALAPPDATA%\VibeIsland\` for state storage
-3. Generates `vibeisland.vbs` — a launcher with your local paths baked in (gitignored, never committed)
+3. Writes `.python-path` (gitignored) — `vibeisland.vbs` reads this at launch time, no hardcoded paths in the repo
 4. Injects hooks into `%USERPROFILE%\.claude\settings.json` for these Claude Code events:
 
 | Event | Purpose |
@@ -123,22 +125,3 @@ cscript.exe vibeisland.vbs
 
 MIT — see [LICENSE](LICENSE).
 
----
-
-# Vibe Island（中文说明）
-
-Windows 悬浮条，Dynamic Island 风格，实时展示所有 Claude Code 会话状态。
-
-**功能**：悬停展开会话卡片（项目名、最近提示词、耗时）、双击跳转到对应 VS Code 窗口、拖拽排序、状态圆点（紫色脉冲=运行中、绿色=空闲、红色=需要关注、蓝色=后台任务）。
-
-**快速上手**：
-
-```powershell
-pip install -r requirements.txt
-python install.py        # 一次性安装，之后只用 vbs
-# 双击 vibeisland.vbs 启动
-```
-
-`install.py` 会自动检测当前 Python 路径、创建状态目录、生成 `vibeisland.vbs`、并向 `~/.claude/settings.json` 注入所需 hooks。重复运行安全（幂等）。
-
-退出方法：在 island 任意位置**右键双击**。

@@ -5,5 +5,8 @@ __pycache__/
 # Written by install.py — contains your local Python path, not for committing
 .python-path
 
+# Claude Code project instructions — local only
+CLAUDE.md
+
 .venv/
 *.egg-info/
