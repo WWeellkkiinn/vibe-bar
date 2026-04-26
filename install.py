@@ -1,12 +1,12 @@
 """One-time setup for Vibe Island.
 
-Run once after cloning:
+Run once after cloning (with the Python environment that has PyQt6 active):
     python install.py
 
 What it does:
   1. Detects the current Python executable (pythonw.exe for no-console launch)
   2. Creates %LOCALAPPDATA%\\VibeIsland\\ state directory
-  3. Generates vibeisland.vbs launcher with your local paths baked in
+  3. Writes .python-path (gitignored) so vibeisland.vbs knows which Python to use
   4. Injects Vibe Island hooks into %USERPROFILE%\\.claude\\settings.json
 
 After this runs, just double-click vibeisland.vbs to start.
@@ -22,7 +22,7 @@ from pathlib import Path
 REPO_DIR = Path(__file__).parent.resolve()
 SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 STATE_DIR = Path(os.environ["LOCALAPPDATA"]) / "VibeIsland"
-VBS_PATH = REPO_DIR / "vibeisland.vbs"
+PYTHON_PATH_FILE = REPO_DIR / ".python-path"
 HOOK_SCRIPT = REPO_DIR / "src" / "hook.py"
 
 HOOK_EVENTS = {
@@ -48,13 +48,9 @@ def ensure_state_dir() -> None:
     print(f"[ok] state dir: {STATE_DIR}")
 
 
-def write_vbs(python_path: str) -> None:
-    content = (
-        'Dim sh : Set sh = CreateObject("WScript.Shell")\n'
-        f'sh.Run """{python_path}"" ""{REPO_DIR / "src" / "ui_qml.py"}""", 0, False\n'
-    )
-    VBS_PATH.write_text(content, encoding="utf-8")
-    print(f"[ok] launcher: {VBS_PATH}")
+def write_python_path(python_path: str) -> None:
+    PYTHON_PATH_FILE.write_text(python_path, encoding="utf-8")
+    print(f"[ok] .python-path: {python_path}")
 
 
 def _is_vibe_entry(cmd: str) -> bool:
@@ -106,7 +102,7 @@ def main() -> None:
     print(f"  Repo:   {REPO_DIR}\n")
 
     ensure_state_dir()
-    write_vbs(python_path)
+    write_python_path(python_path)
     inject_hooks(python_path)
 
     print("\nDone! Double-click vibeisland.vbs to launch.")
