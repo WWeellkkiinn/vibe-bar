@@ -1,6 +1,6 @@
-"""Claude Code hook endpoint for Vibe Island.
+"""Claude Code hook endpoint for VibeBar.
 
-Reads JSON payload on stdin, updates %LOCALAPPDATA%\\VibeIsland\\state.json.
+Reads JSON payload on stdin, updates %LOCALAPPDATA%\\VibeBar\\state.json.
 Invoked by SessionStart / UserPromptSubmit / Stop hooks.
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-STATE_PATH = Path(os.environ["LOCALAPPDATA"]) / "VibeIsland" / "state.json"
+STATE_PATH = Path(os.environ["LOCALAPPDATA"]) / "VibeBar" / "state.json"
 LOCK_PATH = STATE_PATH.with_suffix(".lock")
 DEBUG_LOG = STATE_PATH.parent / "hook-debug.log"
 LOCK_ACQUIRE_TIMEOUT_SEC = 0.3

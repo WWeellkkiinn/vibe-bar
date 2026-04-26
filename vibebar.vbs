@@ -2,7 +2,7 @@ Dim fso, sh, f, pythonPath
 Set fso = CreateObject("Scripting.FileSystemObject")
 Dim dir : dir = fso.GetParentFolderName(WScript.ScriptFullName)
 If Not fso.FileExists(dir & "\.python-path") Then
-    MsgBox "Run 'python install.py' first to set up Vibe Island.", 16, "Vibe Island"
+    MsgBox "Run 'python install.py' first to set up VibeBar.", 16, "VibeBar"
     WScript.Quit 1
 End If
 Set f = fso.OpenTextFile(dir & "\.python-path", 1)

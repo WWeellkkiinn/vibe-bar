@@ -1,15 +1,15 @@
-"""One-time setup for Vibe Island.
+"""One-time setup for VibeBar.
 
 Run once after cloning (with the Python environment that has PyQt6 active):
     python install.py
 
 What it does:
   1. Detects the current Python executable (pythonw.exe for no-console launch)
-  2. Creates %LOCALAPPDATA%\\VibeIsland\\ state directory
-  3. Writes .python-path (gitignored) so vibeisland.vbs knows which Python to use
-  4. Injects Vibe Island hooks into %USERPROFILE%\\.claude\\settings.json
+  2. Creates %LOCALAPPDATA%\\VibeBar\\ state directory
+  3. Writes .python-path (gitignored) so vibebar.vbs knows which Python to use
+  4. Injects VibeBar hooks into %USERPROFILE%\\.claude\\settings.json
 
-After this runs, just double-click vibeisland.vbs to start.
+After this runs, just double-click vibebar.vbs to start.
 Re-running is safe (idempotent).
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ from pathlib import Path
 
 REPO_DIR = Path(__file__).parent.resolve()
 SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
-STATE_DIR = Path(os.environ["LOCALAPPDATA"]) / "VibeIsland"
+STATE_DIR = Path(os.environ["LOCALAPPDATA"]) / "VibeBar"
 PYTHON_PATH_FILE = REPO_DIR / ".python-path"
 HOOK_SCRIPT = REPO_DIR / "src" / "hook.py"
 
@@ -40,7 +40,7 @@ HOOK_EVENTS = {
     "SubagentStop":      {},
 }
 
-_SENTINEL = ("VibeIsland", "vibeisland", "hook.py")
+_SENTINEL = ("VibeBar", "vibebar", "hook.py")
 
 
 def find_pythonw() -> str:
@@ -83,7 +83,7 @@ def inject_hooks(python_path: str) -> None:
 
     for event, extra in HOOK_EVENTS.items():
         existing = hooks_root.get(event, [])
-        # Remove any old Vibe Island / ClaudeWatch entries (idempotent)
+        # Remove any old VibeBar / ClaudeWatch entries (idempotent)
         cleaned = [
             entry for entry in existing
             if not any(
@@ -105,7 +105,7 @@ def inject_hooks(python_path: str) -> None:
 
 
 def main() -> None:
-    print("Vibe Island setup\n")
+    print("VibeBar setup\n")
     python_path = find_pythonw()
     print(f"  Python: {python_path}")
     print(f"  Repo:   {REPO_DIR}\n")
@@ -114,8 +114,8 @@ def main() -> None:
     write_python_path(python_path)
     inject_hooks(python_path)
 
-    print("\nDone! Double-click vibeisland.vbs to launch.")
-    print("To quit: right-click double-click anywhere on the island.")
+    print("\nDone! Double-click vibebar.vbs to launch.")
+    print("To quit: right-click double-click anywhere on the bar.")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Win32 / COM bindings for Vibe Island.
+"""Win32 / COM bindings for VibeBar.
 
 Self-contained: no project dependencies. Host can register a logger via
 set_log_callback() to receive diagnostic messages from internal failures.

@@ -1,4 +1,4 @@
-# Vibe Island
+# VibeBar
 
 English | [中文](README.zh.md)
 
@@ -7,7 +7,7 @@ A Dynamic Island–style floating bar for Windows that shows all your Claude Cod
 Hover to expand — see which projects are running, what was last asked, and how long ago. Double-click a card to jump to that VS Code window. Drag cards to reorder.
 
 <div align="center">
-  <img src="VibeIsland.gif" alt="Vibe Island demo" width="600">
+  <img src="VibeBar.gif" alt="VibeBar demo" width="600">
 </div>
 
 ## Features
@@ -30,8 +30,8 @@ Hover to expand — see which projects are running, what was last asked, and how
 
 ```powershell
 # 1. Clone
-git clone https://github.com/WWeellkkiinn/vibe-island.git
-cd vibe-island
+git clone https://github.com/WWeellkkiinn/vibe-bar.git
+cd vibe-bar
 
 # 2. Install dependency
 pip install -r requirements.txt
@@ -40,18 +40,18 @@ pip install -r requirements.txt
 python install.py
 
 # 4. Launch
-# Double-click vibeisland.vbs
+# Double-click vibebar.vbs
 # — or —
-cscript.exe vibeisland.vbs
+cscript.exe vibebar.vbs
 ```
 
-To quit: **right-click double-click** anywhere on the island.
+To quit: **right-click double-click** anywhere on the bar.
 
 ## What `install.py` does
 
 1. Detects your Python installation (prefers `pythonw.exe` for no-console launch)
-2. Creates `%LOCALAPPDATA%\VibeIsland\` for state storage
-3. Writes `.python-path` (gitignored) — `vibeisland.vbs` reads this at launch time, no hardcoded paths in the repo
+2. Creates `%LOCALAPPDATA%\VibeBar\` for state storage
+3. Writes `.python-path` (gitignored) — `vibebar.vbs` reads this at launch time, no hardcoded paths in the repo
 4. Injects hooks into `%USERPROFILE%\.claude\settings.json` for these Claude Code events:
 
 | Event | Purpose |
@@ -67,7 +67,7 @@ To quit: **right-click double-click** anywhere on the island.
 
 > **Note:** `install.py` is idempotent — re-running it refreshes hook paths safely without duplicating entries.
 
-> **If you already have other hooks** for these events, `install.py` preserves them and only replaces the Vibe Island entry.
+> **If you already have other hooks** for these events, `install.py` preserves them and only replaces the VibeBar entry.
 
 ## Debug mode
 
@@ -81,16 +81,16 @@ echo '{"session_id":"s1","hook_event_name":"UserPromptSubmit","cwd":"C:/dev/mypr
 echo '{"session_id":"s1","hook_event_name":"Stop","cwd":"C:/dev/myproject"}' | python src/hook.py
 ```
 
-State is written to `%LOCALAPPDATA%\VibeIsland\state.json`.
+State is written to `%LOCALAPPDATA%\VibeBar\state.json`.
 
 ## Architecture
 
 ```
-Claude Code → src/hook.py → %LOCALAPPDATA%\VibeIsland\state.json → src/ui_qml.py (250ms poll)
+Claude Code → src/hook.py → %LOCALAPPDATA%\VibeBar\state.json → src/ui_qml.py (250ms poll)
 ```
 
 ```
-vibe-island/
+vibe-bar/
 ├── src/
 │   ├── hook.py       # Hook entry point — reads stdin JSON, writes state.json
 │   ├── ui_qml.py     # Main process — window, worker thread, state consumption
@@ -98,7 +98,7 @@ vibe-island/
 │   ├── models.py     # SessionsModel + IslandBridge (Python ↔ QML)
 │   └── win32.py      # Win32 bindings — HWND, DWM, SetWindowRgn, monitor
 ├── install.py        # One-time setup — writes .python-path + injects hooks
-├── vibeisland.vbs    # Launcher — reads .python-path, starts ui_qml.py silently
+├── vibebar.vbs       # Launcher — reads .python-path, starts ui_qml.py silently
 └── .python-path      # (gitignored) your local Python executable path
 ```
 
@@ -116,7 +116,7 @@ To restart after code changes:
 
 ```powershell
 Get-Process pythonw -ErrorAction SilentlyContinue | Stop-Process -Force
-cscript.exe vibeisland.vbs
+cscript.exe vibebar.vbs
 ```
 
 ## Roadmap
@@ -125,7 +125,7 @@ cscript.exe vibeisland.vbs
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=WWeellkkiinn/vibe-island&type=Date)](https://star-history.com/#WWeellkkiinn/vibe-island&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=WWeellkkiinn/vibe-bar&type=Date)](https://star-history.com/#WWeellkkiinn/vibe-bar&Date)
 
 ## License
 
@@ -133,5 +133,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-Thanks for checking out Vibe Island! If it makes your Claude Code workflow a little nicer, a ⭐ on GitHub goes a long way.
-
+Thanks for checking out VibeBar! If it makes your Claude Code workflow a little nicer, a ⭐ on GitHub goes a long way.

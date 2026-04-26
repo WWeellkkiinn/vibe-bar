@@ -26,7 +26,7 @@ ISLAND_W = 280
 COLLAPSED_H = 20
 
 
-class VibeIslandApp:
+class VibeBarApp:
     def __init__(self):
         self.qt = QApplication(sys.argv)
         self.qt.setQuitOnLastWindowClosed(False)
@@ -286,5 +286,5 @@ class VibeIslandApp:
 
 
 if __name__ == "__main__":
-    app = VibeIslandApp()
+    app = VibeBarApp()
     sys.exit(app.run())

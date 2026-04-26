@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import QAbstractListModel, QModelIndex, Qt, pyqtSlot, QObject, pyqtSignal, pyqtProperty
 
-STATE_PATH = Path(os.environ["LOCALAPPDATA"]) / "VibeIsland" / "state.json"
+STATE_PATH = Path(os.environ["LOCALAPPDATA"]) / "VibeBar" / "state.json"
 LOCK_PATH  = STATE_PATH.with_suffix(".lock")
 
 STATUS_RUNNING = "running"
