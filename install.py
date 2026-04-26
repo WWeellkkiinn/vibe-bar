@@ -68,8 +68,10 @@ def inject_hooks(python_path: str) -> None:
     if SETTINGS_PATH.exists():
         try:
             data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
+        except json.JSONDecodeError as e:
+            print(f"[warn] settings.json is invalid JSON ({e}) — aborting to avoid data loss.")
+            print(f"       Fix or delete {SETTINGS_PATH} and re-run.")
+            raise SystemExit(1)
     else:
         data = {}
 

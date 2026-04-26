@@ -272,7 +272,7 @@ class VibeIslandApp:
             to_del = []
             for sid, s in sessions.items():
                 age = _age_sec(s, now)
-                if s.get("status") == "running" and age > STALE_RUNNING_SEC:
+                if s.get("status") == "running" and age > STALE_RUNNING_SEC and not s.get("is_primary"):
                     s["status"] = "idle"
                     s.setdefault("finished_at", s.get("last_update"))
                     changed = True

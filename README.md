@@ -94,7 +94,7 @@ Claude Code → src/hook.py → %LOCALAPPDATA%\VibeIsland\state.json → src/ui_
 | `src/island.qml` | QML UI — collapse/expand animation, session cards, drag-to-reorder |
 | `src/models.py` | `SessionsModel` (QAbstractListModel) + `IslandBridge` (Python↔QML bridge) |
 | `src/win32.py` | Win32 bindings — HWND, DWM, SetWindowRgn, monitor geometry, window focus |
-| `install.py` | One-time setup — generates VBS launcher + injects Claude Code hooks |
+| `install.py` | One-time setup — writes `.python-path` + injects Claude Code hooks |
 
 ### Key constraints
 
