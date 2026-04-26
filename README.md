@@ -6,7 +6,9 @@ A Dynamic Island–style floating bar for Windows that shows all your Claude Cod
 
 Hover to expand — see which projects are running, what was last asked, and how long ago. Double-click a card to jump to that VS Code window. Drag cards to reorder.
 
-<!-- TODO: add demo GIF here -->
+<div align="center">
+  <img src="VibeIsland.gif" alt="Vibe Island demo" width="600">
+</div>
 
 ## Features
 
