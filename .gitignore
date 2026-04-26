@@ -10,3 +10,6 @@ CLAUDE.md
 
 .venv/
 *.egg-info/
+
+# Local demo/dev helper, not needed by end users
+demo.ps1
