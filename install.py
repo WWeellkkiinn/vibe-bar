@@ -71,7 +71,10 @@ def inject_hooks(python_path: str) -> None:
         data = {}
 
     hooks_root = data.setdefault("hooks", {})
-    hook_cmd = f"{python_path} {HOOK_SCRIPT}"
+    # Claude Code runs hooks via bash — use forward slashes so paths survive
+    py = str(python_path).replace("\\", "/")
+    hs = str(HOOK_SCRIPT).replace("\\", "/")
+    hook_cmd = f"{py} {hs}"
 
     for event, extra in HOOK_EVENTS.items():
         existing = hooks_root.get(event, [])
