@@ -13,14 +13,34 @@ Window {
         width: parent.width
         anchors.bottom: parent.bottom
 
-        property real sf: scaleFactor   // injected from Python (1.0 at 100%, 1.5 at 150%)
+        property real sf: scaleFactor
         property bool expanded: false
         property int  collapsedH: Math.round(20 * sf)
         property int  bodyPadding: 0
         property int  cardH: Math.round(60 * sf)
         property int  cardSpacing: Math.round(8 * sf)
-        property int  visibleRows: Math.max(1, Math.min(sessionsModel.sessionCount, 10))
-        property int  expandedH: bodyPadding * 2 + visibleRows * cardH + Math.max(0, visibleRows - 1) * cardSpacing
+        // slotH = card + spacing: each delegate owns its own spacing so height=0 removes spacing too
+        property int  slotH: cardH + cardSpacing
+        property int  displayCount: 0
+        property int  visibleRows: Math.max(1, Math.min(displayCount, 10))
+        property int  expandedH: bodyPadding * 2 + visibleRows * slotH
+
+        Component.onCompleted: displayCount = sessionsModel.sessionCount
+
+        Connections {
+            target: sessionsModel
+            function onCountChanged() {
+                if (sessionsModel.sessionCount < island.displayCount)
+                    shrinkDelay.restart()
+                else if (sessionsModel.sessionCount !== island.displayCount)
+                    island.displayCount = sessionsModel.sessionCount
+            }
+        }
+        Timer {
+            id: shrinkDelay
+            interval: 220
+            onTriggered: island.displayCount = sessionsModel.sessionCount
+        }
 
         height: expanded ? expandedH : collapsedH
         Behavior on height {
@@ -49,23 +69,14 @@ Window {
         color: island.expanded ? "transparent" : "#15171d"
         Behavior on color { ColorAnimation { duration: 200 } }
 
-        // Hover detection
         HoverHandler {
             id: hoverHandler
             onHoveredChanged: {
-                if (hovered) {
-                    leaveTimer.stop()
-                    island.expanded = true
-                } else {
-                    leaveTimer.restart()
-                }
+                if (hovered) { leaveTimer.stop(); island.expanded = true }
+                else          { leaveTimer.restart() }
             }
         }
-        Timer {
-            id: leaveTimer
-            interval: 400
-            onTriggered: island.expanded = false
-        }
+        Timer { id: leaveTimer; interval: 400; onTriggered: island.expanded = false }
 
         // ── Collapsed: dot strip ──────────────────────────────────────────────
         Item {
@@ -101,20 +112,17 @@ Window {
                         anchors.verticalCenter: parent.verticalCenter
                         color: dotColor
                         SequentialAnimation on color {
-                            running: isAttention
-                            loops: Animation.Infinite
+                            running: isAttention; loops: Animation.Infinite
                             ColorAnimation { to: "#7a1a1a"; duration: 1500 }
                             ColorAnimation { to: "#ef4444"; duration: 1500 }
                         }
                         SequentialAnimation on color {
-                            running: isRunning && !isAttention
-                            loops: Animation.Infinite
+                            running: isRunning && !isAttention; loops: Animation.Infinite
                             ColorAnimation { to: "#5b21b6"; duration: 1500 }
                             ColorAnimation { to: "#8b5cf6"; duration: 1500 }
                         }
                         SequentialAnimation on color {
-                            running: isBackground && !isRunning && !isAttention
-                            loops: Animation.Infinite
+                            running: isBackground && !isRunning && !isAttention; loops: Animation.Infinite
                             ColorAnimation { to: "#1e3a8a"; duration: 1500 }
                             ColorAnimation { to: "#3b82f6"; duration: 1500 }
                         }
@@ -140,15 +148,21 @@ Window {
 
             ListView {
                 id: cardsList
-                anchors.fill: parent
-                spacing: island.cardSpacing
-                clip: true
+                anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+                height: island.visibleRows * island.slotH
+                Behavior on height {
+                    NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+                }
+                spacing: 0
+                clip: false
                 model: sessionsModel
 
                 property real dragComp: 0
                 property int  dragSlot: -1
 
-                delegate: Rectangle {
+                // ── Card delegate ─────────────────────────────────────────────
+                delegate: Item {
+                    id: cardDelegate
                     required property string sid
                     required property string cwdName
                     required property string lastPrompt
@@ -162,150 +176,175 @@ Window {
                     required property string source
                     required property int    index
 
+                    property bool _closing: false
+
                     width: cardsList.width
-                    height: island.cardH
-                    radius: Math.round(16 * island.sf)
-                    color: bgColor
+                    height: island.slotH
+                    clip: _closing   // clip only during collapse, not during drag
                     z: dragH.active ? 2 : 1
-                    transform: Translate { y: dragH.active ? (dragH.activeTranslation.y + cardsList.dragComp) : 0 }
 
-                    DragHandler {
-                        id: dragH
-                        target: null
-                        acceptedButtons: Qt.LeftButton
-                        dragThreshold: Math.round(8 * island.sf)
-                        onActiveChanged: {
-                            bridge.setDragging(active)
-                            if (active) {
-                                cardsList.dragSlot = index
-                                cardsList.dragComp = 0
+                    states: State {
+                        name: "closing"; when: cardDelegate._closing
+                        PropertyChanges { target: cardDelegate; height: 0; opacity: 0 }
+                    }
+                    transitions: Transition {
+                        from: ""; to: "closing"
+                        ParallelAnimation {
+                            NumberAnimation { property: "height";  duration: 280; easing.type: Easing.OutCubic }
+                            NumberAnimation { property: "opacity"; duration: 220; easing.type: Easing.OutCubic }
+                        }
+                    }
+
+                    Timer {
+                        id: closeTimer
+                        interval: 280
+                        onTriggered: bridge.closeSession(cardDelegate.sid)
+                    }
+
+                    // ── Visual card (cardH tall, sits at top of slotH delegate) ──
+                    Rectangle {
+                        id: cardVisual
+                        width: parent.width
+                        height: island.cardH
+                        anchors.top: parent.top
+                        radius: Math.round(16 * island.sf)
+                        color: bgColor
+                        transform: Translate { y: dragH.active ? (dragH.activeTranslation.y + cardsList.dragComp) : 0 }
+
+                        DragHandler {
+                            id: dragH
+                            target: null
+                            acceptedButtons: Qt.LeftButton
+                            dragThreshold: Math.round(8 * island.sf)
+                            onActiveChanged: {
+                                bridge.setDragging(active)
+                                if (active) { cardsList.dragSlot = index; cardsList.dragComp = 0 }
+                            }
+                            onActiveTranslationChanged: {
+                                if (!active || cardsList.dragSlot < 0) return
+                                var visualY = cardsList.dragSlot * island.slotH + activeTranslation.y + cardsList.dragComp
+                                var newSlot = Math.max(0, Math.min(sessionsModel.sessionCount - 1,
+                                                                   Math.round(visualY / island.slotH)))
+                                if (newSlot !== cardsList.dragSlot) {
+                                    cardsList.dragComp += (cardsList.dragSlot - newSlot) * island.slotH
+                                    bridge.moveSessionByIndex(cardsList.dragSlot, newSlot)
+                                    cardsList.dragSlot = newSlot
+                                }
                             }
                         }
-                        onActiveTranslationChanged: {
-                            if (!active || cardsList.dragSlot < 0) return
-                            var slotH = island.cardH + island.cardSpacing
-                            var visualY = cardsList.dragSlot * slotH + activeTranslation.y + cardsList.dragComp
-                            var newSlot = Math.max(0, Math.min(sessionsModel.sessionCount - 1,
-                                                               Math.round(visualY / slotH)))
-                            if (newSlot !== cardsList.dragSlot) {
-                                cardsList.dragComp += (cardsList.dragSlot - newSlot) * slotH
-                                bridge.moveSessionByIndex(cardsList.dragSlot, newSlot)
-                                cardsList.dragSlot = newSlot
-                            }
-                        }
-                    }
 
-                    HoverHandler { id: cardHover }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: parent.radius
-                        color: "#ffffff"
-                        opacity: (cardHover.hovered || dragH.active) ? 0.12 : 0.0
-                        Behavior on opacity { NumberAnimation { duration: 100 } }
-                    }
-
-                    Rectangle {
-                        id: statusDot
-                        width: Math.round(8 * island.sf); height: Math.round(8 * island.sf)
-                        radius: Math.round(4 * island.sf)
-                        anchors { left: parent.left; leftMargin: Math.round(14 * island.sf); verticalCenter: parent.verticalCenter }
-                        color: dotColor
-                        SequentialAnimation on color {
-                            running: isAttention
-                            loops: Animation.Infinite
-                            ColorAnimation { to: "#7a1a1a"; duration: 1500 }
-                            ColorAnimation { to: "#ef4444"; duration: 1500 }
-                        }
-                        SequentialAnimation on color {
-                            running: isRunning && !isAttention
-                            loops: Animation.Infinite
-                            ColorAnimation { to: "#5b21b6"; duration: 1500 }
-                            ColorAnimation { to: "#8b5cf6"; duration: 1500 }
-                        }
-                        SequentialAnimation on color {
-                            running: isBackground && !isRunning && !isAttention
-                            loops: Animation.Infinite
-                            ColorAnimation { to: "#1e3a8a"; duration: 1500 }
-                            ColorAnimation { to: "#3b82f6"; duration: 1500 }
-                        }
-                    }
-
-                    // Row 1: project name (left) + elapsed (right)
-                    Text {
-                        id: elapsedText
-                        anchors { right: closeBtn.left; rightMargin: Math.round(4 * island.sf); top: parent.top; topMargin: Math.round(14 * island.sf) }
-                        text: elapsed
-                        color: "#5e6678"
-                        font { pixelSize: Math.round(10 * island.sf) }
-                    }
-
-                    Text {
-                        id: sourceBadge
-                        anchors { left: statusDot.right; leftMargin: Math.round(10 * island.sf); top: parent.top; topMargin: Math.round(17 * island.sf) }
-                        text: source === "codex" ? "CX" : "CC"
-                        color: source === "codex" ? "#7B9FFF" : "#FF8C42"
-                        font { pixelSize: Math.round(9 * island.sf); bold: true }
-                    }
-
-                    Text {
-                        anchors {
-                            left: sourceBadge.right; leftMargin: Math.round(4 * island.sf)
-                            right: elapsedText.left; rightMargin: Math.round(4 * island.sf)
-                            top: parent.top; topMargin: Math.round(14 * island.sf)
-                        }
-                        text: cwdName
-                        color: "#f2f4f8"
-                        font { family: "Microsoft YaHei UI"; pixelSize: Math.round(13 * island.sf); bold: true }
-                        elide: Text.ElideRight
-                    }
-
-                    // Row 2: last prompt (left)
-                    Text {
-                        anchors {
-                            left: statusDot.right; leftMargin: Math.round(10 * island.sf)
-                            right: closeBtn.left; rightMargin: Math.round(6 * island.sf)
-                            bottom: parent.bottom; bottomMargin: Math.round(12 * island.sf)
-                        }
-                        text: lastPrompt
-                        color: "#9aa3b5"
-                        font { family: "Microsoft YaHei UI"; pixelSize: Math.round(11 * island.sf) }
-                        elide: Text.ElideRight
-                        maximumLineCount: 1
-                    }
-
-                    Item {
-                        id: closeBtn
-                        anchors { right: parent.right; rightMargin: Math.round(8 * island.sf); verticalCenter: parent.verticalCenter }
-                        width: Math.round(30 * island.sf); height: Math.round(30 * island.sf)
-
-                        HoverHandler { id: closeBtnHover }
+                        HoverHandler { id: cardHover }
 
                         Rectangle {
                             anchors.fill: parent
-                            radius: width / 2
-                            color: closeBtnHover.hovered ? "#3a3f50" : "transparent"
-                            Behavior on color { ColorAnimation { duration: 120 } }
+                            radius: parent.radius
+                            color: "#ffffff"
+                            opacity: (cardHover.hovered || dragH.active) ? 0.12 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 100 } }
+                        }
+
+                        Rectangle {
+                            id: statusDot
+                            width: Math.round(8 * island.sf); height: Math.round(8 * island.sf)
+                            radius: Math.round(4 * island.sf)
+                            anchors { left: parent.left; leftMargin: Math.round(14 * island.sf); verticalCenter: parent.verticalCenter }
+                            color: dotColor
+                            SequentialAnimation on color {
+                                running: isAttention; loops: Animation.Infinite
+                                ColorAnimation { to: "#7a1a1a"; duration: 1500 }
+                                ColorAnimation { to: "#ef4444"; duration: 1500 }
+                            }
+                            SequentialAnimation on color {
+                                running: isRunning && !isAttention; loops: Animation.Infinite
+                                ColorAnimation { to: "#5b21b6"; duration: 1500 }
+                                ColorAnimation { to: "#8b5cf6"; duration: 1500 }
+                            }
+                            SequentialAnimation on color {
+                                running: isBackground && !isRunning && !isAttention; loops: Animation.Infinite
+                                ColorAnimation { to: "#1e3a8a"; duration: 1500 }
+                                ColorAnimation { to: "#3b82f6"; duration: 1500 }
+                            }
                         }
 
                         Text {
-                            anchors.centerIn: parent
-                            text: "×"
-                            color: closeBtnHover.hovered ? "#e05c5c" : "#5e6678"
-                            font { pixelSize: Math.round(18 * island.sf) }
-                            Behavior on color { ColorAnimation { duration: 120 } }
+                            id: elapsedText
+                            anchors { right: closeBtn.left; rightMargin: Math.round(4 * island.sf); top: parent.top; topMargin: Math.round(14 * island.sf) }
+                            text: elapsed
+                            color: "#5e6678"
+                            font { pixelSize: Math.round(10 * island.sf) }
+                        }
+
+                        Text {
+                            id: sourceBadge
+                            anchors { left: statusDot.right; leftMargin: Math.round(10 * island.sf); top: parent.top; topMargin: Math.round(17 * island.sf) }
+                            text: source === "codex" ? "CX" : "CC"
+                            color: source === "codex" ? "#7B9FFF" : "#FF8C42"
+                            font { pixelSize: Math.round(9 * island.sf); bold: true }
+                        }
+
+                        Text {
+                            anchors {
+                                left: sourceBadge.right; leftMargin: Math.round(4 * island.sf)
+                                right: elapsedText.left; rightMargin: Math.round(4 * island.sf)
+                                top: parent.top; topMargin: Math.round(14 * island.sf)
+                            }
+                            text: cwdName
+                            color: "#f2f4f8"
+                            font { family: "Microsoft YaHei UI"; pixelSize: Math.round(13 * island.sf); bold: true }
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            anchors {
+                                left: statusDot.right; leftMargin: Math.round(10 * island.sf)
+                                right: closeBtn.left; rightMargin: Math.round(6 * island.sf)
+                                bottom: parent.bottom; bottomMargin: Math.round(12 * island.sf)
+                            }
+                            text: lastPrompt
+                            color: "#9aa3b5"
+                            font { family: "Microsoft YaHei UI"; pixelSize: Math.round(11 * island.sf) }
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
+                        }
+
+                        Item {
+                            id: closeBtn
+                            anchors { right: parent.right; rightMargin: Math.round(8 * island.sf); verticalCenter: parent.verticalCenter }
+                            width: Math.round(30 * island.sf); height: Math.round(30 * island.sf)
+
+                            HoverHandler { id: closeBtnHover }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: width / 2
+                                color: closeBtnHover.hovered ? "#3a3f50" : "transparent"
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "×"
+                                color: closeBtnHover.hovered ? "#e05c5c" : "#5e6678"
+                                font { pixelSize: Math.round(18 * island.sf) }
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            TapHandler {
+                                gesturePolicy: TapHandler.WithinBounds
+                                onTapped: {
+                                    if (cardDelegate._closing) return
+                                    cardDelegate._closing = true
+                                    if (island.displayCount > 1) island.displayCount -= 1
+                                    closeTimer.start()
+                                }
+                            }
                         }
 
                         TapHandler {
-                            gesturePolicy: TapHandler.WithinBounds
-                            onTapped: bridge.closeSession(sid)
+                            acceptedButtons: Qt.LeftButton
+                            gesturePolicy: TapHandler.ReleaseWithinBounds
+                            onDoubleTapped: bridge.jump(sid)
                         }
-                    }
-
-                    TapHandler {
-                        acceptedButtons: Qt.LeftButton
-                        gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onDoubleTapped: bridge.jump(sid)
                     }
                 }
             }
@@ -317,7 +356,6 @@ Window {
         }
     }
 
-    // Right-click double-click → quit
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.RightButton

@@ -160,9 +160,16 @@ def main() -> int:
                 sess.setdefault("active_bash", False)
             if payload.get("model"):
                 sess["model"] = payload.get("model")
-            if source_name == "codex" or payload.get("model"):
-                sess["is_primary"] = True
-            elif source == "resume":
+            if source_name == "codex":
+                # If another active CX already exists for this cwd, stay hidden until
+                # UserPromptSubmit confirms it's a real user session (not a rescue agent)
+                has_active_cx = any(
+                    s.get("source") == "codex" and s.get("cwd") == cwd
+                    and s.get("is_primary") and not s.get("user_closed") and k != sid
+                    for k, s in sessions.items()
+                )
+                sess["is_primary"] = not has_active_cx
+            elif payload.get("model") or source == "resume":
                 sess["is_primary"] = True
             else:
                 sess["is_primary"] = False
@@ -174,10 +181,13 @@ def main() -> int:
             sess["last_prompt"] = prompt[:80]
             sess["prompt_at"] = _now_iso()
             sess["finished_at"] = None
-            if source_name == "codex" and prompt.lstrip().startswith("--wait"):
+            _p = prompt.lstrip()
+            if source_name == "codex" and (_p.startswith("--wait") or _p.startswith("<task>")):
                 sess["is_rescue_agent"] = True
             else:
                 sess.pop("is_rescue_agent", None)
+                if source_name == "codex":
+                    sess["is_primary"] = True  # upgrade hidden CX to visible on real prompt
         elif event == "PermissionRequest":
             sess["needs_attention"] = True
         elif event == "Notification":

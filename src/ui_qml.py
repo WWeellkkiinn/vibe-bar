@@ -135,7 +135,7 @@ class VibeBarApp:
             if s.get("is_primary") and not s.get("user_closed")
             and (s.get("status") == STATUS_RUNNING or _age_sec(s, now_dt) <= FOUR_HOURS_SEC)
             and not s.get("is_rescue_agent")
-            and not str(s.get("last_prompt") or "").lstrip().startswith("--wait")
+            and not str(s.get("last_prompt") or "").lstrip().startswith(("--wait", "<task>"))
         }
 
         sessions = candidates

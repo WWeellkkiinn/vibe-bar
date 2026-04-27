@@ -152,14 +152,34 @@ class SessionsModel(QAbstractListModel):
     def update_sessions(self, sessions: dict, order: list[str]) -> None:
         if order == self._order and sessions == self._rows:
             return
+        root = QModelIndex()
         old_count = len(self._order)
-        gone = set(self._order) - set(order)
-        for sid in gone:
+
+        # Proper row removal → triggers QML remove transition
+        pos = {sid: i for i, sid in enumerate(self._order)}
+        for sid in list(set(self._order) - set(order)):
+            i = pos.pop(sid)
+            self.beginRemoveRows(root, i, i)
+            self._order.pop(i)
+            self._rows.pop(sid, None)
             self._bg.pop(sid, None)
-        self.beginResetModel()
-        self._order = list(order)
-        self._rows  = dict(sessions)
-        self.endResetModel()
+            self.endRemoveRows()
+            pos = {sid: j for j, sid in enumerate(self._order)}
+
+        # New items or reorder: full reset (rare path, no animation needed)
+        if set(order) - set(self._order) or self._order != order:
+            self.beginResetModel()
+            self._order = list(order)
+            self._rows  = dict(sessions)
+            self.endResetModel()
+        else:
+            # Same set and order: emit dataChanged per item (no flicker)
+            for i, sid in enumerate(self._order):
+                if sessions.get(sid) != self._rows.get(sid):
+                    self._rows[sid] = sessions[sid]
+                    idx = self.index(i)
+                    self.dataChanged.emit(idx, idx)
+
         if len(self._order) != old_count:
             self.countChanged.emit()
 
