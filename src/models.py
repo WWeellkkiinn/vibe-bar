@@ -97,6 +97,7 @@ class SessionsModel(QAbstractListModel):
     BgColorRole     = Qt.ItemDataRole.UserRole + 9
     IsAttentionRole = Qt.ItemDataRole.UserRole + 10
     IsBackgroundRole = Qt.ItemDataRole.UserRole + 11
+    SourceRole       = Qt.ItemDataRole.UserRole + 12
 
     countChanged = pyqtSignal()
 
@@ -126,6 +127,7 @@ class SessionsModel(QAbstractListModel):
             self.BgColorRole:     b"bgColor",
             self.IsAttentionRole: b"isAttention",
             self.IsBackgroundRole: b"isBackground",
+            self.SourceRole:       b"source",
         }
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
@@ -144,6 +146,7 @@ class SessionsModel(QAbstractListModel):
         if role == self.BgColorRole:      return self._bg.get(sid, SURFACE)
         if role == self.IsAttentionRole:  return bool(s.get("needs_attention"))
         if role == self.IsBackgroundRole: return _is_background(s)
+        if role == self.SourceRole:       return s.get("source", "claude")
         return None
 
     def update_sessions(self, sessions: dict, order: list[str]) -> None:
@@ -195,7 +198,6 @@ class IslandBridge(QObject):
         super().__init__(parent)
         self._model = model
         self._cmd_queue = cmd_queue
-        self._session_cwds: dict[str, str] = {}
         self._own_hwnd: int = 0
         self._island_h: int = 30
         self._window_h_logical: int = 0
@@ -217,9 +219,6 @@ class IslandBridge(QObject):
         self._island_h = h
         self._update_mask(h)
 
-    def set_session_cwds(self, cwds: dict[str, str]) -> None:
-        self._session_cwds = cwds
-
     @pyqtSlot(str)
     def jump(self, sid: str) -> None:
         from win32 import find_vscode_hwnd_for_cwd, foreground_window, ensure_on_current_desktop
@@ -235,9 +234,8 @@ class IslandBridge(QObject):
 
     @pyqtSlot(str)
     def closeSession(self, sid: str) -> None:
-        cwd = self._session_cwds.get(sid, "")
         try:
-            self._cmd_queue.put_nowait(("close_cwd" if cwd else "close_session", cwd or sid))
+            self._cmd_queue.put_nowait(("close_session", sid))
         except queue.Full:
             pass
 

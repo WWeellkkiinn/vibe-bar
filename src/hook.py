@@ -108,16 +108,20 @@ def release_lock(fd: int | None) -> None:
 
 
 def main() -> int:
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     raw = ""
     try:
-        raw = sys.stdin.read()
+        raw = sys.stdin.read().lstrip('\ufeff')
         payload = json.loads(raw) if raw.strip() else {}
     except Exception:
         payload = {}
 
     debug_log(raw, payload)
 
-    sid = str(payload.get("session_id", "")).strip() or "unknown"
+    source_name = os.environ.get("VIBEBAR_SOURCE", "claude")
+    original_sid = str(payload.get("session_id", "")).strip() or "unknown"
+    sid = f"codex:{original_sid}" if source_name == "codex" else original_sid
     event = str(payload.get("hook_event_name", "")).strip()
     cwd = str(payload.get("cwd", "") or "").strip()
     if not cwd:
@@ -125,13 +129,13 @@ def main() -> int:
         if isinstance(workspace, dict):
             cwd = str(workspace.get("current_dir", "") or "").strip()
 
-    if sid == "unknown" and event not in ("SessionStart", "UserPromptSubmit", "Stop", "StopFailure"):
+    if original_sid == "unknown" and event not in ("SessionStart", "UserPromptSubmit", "Stop", "StopFailure"):
         return 0
 
     fd = acquire_lock()
     if fd is None:
-        # Lock contention (subagent storm / concurrent hooks). Skip silently;
-        # the next hook call will bring state back in sync.
+        if source_name == "codex" and event == "Stop":
+            print('{"continue": true}')
         return 0
     try:
         state = load_state()
@@ -139,6 +143,7 @@ def main() -> int:
         sessions = state.setdefault("sessions", {})
         sess = sessions.setdefault(sid, {})
         sess["last_update"] = _now_iso()
+        sess["source"] = source_name
 
         if event == "SessionStart":
             # SessionStart gives the canonical cwd — always trust it.
@@ -147,15 +152,16 @@ def main() -> int:
                 sess["cwd_name"] = Path(cwd).name or cwd
             sess.setdefault("status", "idle")
             source = str(payload.get("source", "")).strip()
-            if source != "resume":
+            if source_name == "codex" or source != "resume":
                 sess["active_subagent_count"] = 0
                 sess["active_bash"] = False
             else:
                 sess.setdefault("active_subagent_count", 0)
                 sess.setdefault("active_bash", False)
             if payload.get("model"):
-                sess["is_primary"] = True
                 sess["model"] = payload.get("model")
+            if source_name == "codex" or payload.get("model"):
+                sess["is_primary"] = True
             elif source == "resume":
                 sess["is_primary"] = True
             else:
@@ -164,9 +170,14 @@ def main() -> int:
             sess.pop("user_closed", None)
             sess["needs_attention"] = False
             sess["status"] = "running"
-            sess["last_prompt"] = (str(payload.get("prompt", "") or ""))[:80]
+            prompt = str(payload.get("prompt", "") or "")
+            sess["last_prompt"] = prompt[:80]
             sess["prompt_at"] = _now_iso()
             sess["finished_at"] = None
+            if source_name == "codex" and prompt.lstrip().startswith("--wait"):
+                sess["is_rescue_agent"] = True
+            else:
+                sess.pop("is_rescue_agent", None)
         elif event == "PermissionRequest":
             sess["needs_attention"] = True
         elif event == "Notification":
@@ -183,10 +194,12 @@ def main() -> int:
             # but their own (sub)directory, causing cwd drift.
             sess["status"] = "idle"
             sess["finished_at"] = _now_iso()
+            sess["active_bash"] = False
+            sess["active_subagent_count"] = 0
             sess["needs_attention"] = False
-        elif event == "SubagentStart":
+        elif event == "SubagentStart" and source_name != "codex":
             sess["active_subagent_count"] = max(0, sess.get("active_subagent_count", 0)) + 1
-        elif event == "SubagentStop":
+        elif event == "SubagentStop" and source_name != "codex":
             sess["active_subagent_count"] = max(0, sess.get("active_subagent_count", 0) - 1)
         elif event == "PreToolUse" and payload.get("tool_name") == "Bash":
             sess["active_bash"] = True
@@ -200,6 +213,10 @@ def main() -> int:
         save_state(state)
     finally:
         release_lock(fd)
+
+    # Codex Stop hook requires JSON output to confirm session may stop
+    if source_name == "codex" and event == "Stop":
+        print('{"continue": true}')
 
     return 0
 

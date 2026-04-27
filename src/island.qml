@@ -13,12 +13,13 @@ Window {
         width: parent.width
         anchors.bottom: parent.bottom
 
+        property real sf: scaleFactor   // injected from Python (1.0 at 100%, 1.5 at 150%)
         property bool expanded: false
-        property int  collapsedH: 20
+        property int  collapsedH: Math.round(20 * sf)
         property int  bodyPadding: 0
-        property int  cardH: 60
-        property int  cardSpacing: 8
-        property int  visibleRows: Math.max(1, Math.min(sessionsModel.sessionCount, 6))
+        property int  cardH: Math.round(60 * sf)
+        property int  cardSpacing: Math.round(8 * sf)
+        property int  visibleRows: Math.max(1, Math.min(sessionsModel.sessionCount, 10))
         property int  expandedH: bodyPadding * 2 + visibleRows * cardH + Math.max(0, visibleRows - 1) * cardSpacing
 
         height: expanded ? expandedH : collapsedH
@@ -44,7 +45,7 @@ Window {
             if (expanded) bridge.onExpandStart(expandedH)
         }
 
-        radius: 12
+        radius: Math.round(12 * sf)
         color: island.expanded ? "transparent" : "#15171d"
         Behavior on color { ColorAnimation { duration: 200 } }
 
@@ -71,18 +72,19 @@ Window {
             id: dotStrip
             anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
             height: island.collapsedH
-            width: Math.max(10, dotRow.implicitWidth)
+            width: Math.max(Math.round(10 * island.sf), dotRow.implicitWidth)
             opacity: island.expanded ? 0.0 : 1.0
             Behavior on opacity { NumberAnimation { duration: 120 } }
 
             Row {
                 id: dotRow
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: Math.round(8 * island.sf)
 
                 Rectangle {
                     visible: sessionsModel.sessionCount === 0
-                    width: 10; height: 10; radius: 5
+                    width: Math.round(10 * island.sf); height: Math.round(10 * island.sf)
+                    radius: Math.round(5 * island.sf)
                     color: "#5e6678"
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -94,7 +96,8 @@ Window {
                         required property bool   isRunning
                         required property bool   isAttention
                         required property bool   isBackground
-                        width: 10; height: 10; radius: 5
+                        width: Math.round(10 * island.sf); height: Math.round(10 * island.sf)
+                        radius: Math.round(5 * island.sf)
                         anchors.verticalCenter: parent.verticalCenter
                         color: dotColor
                         SequentialAnimation on color {
@@ -106,13 +109,13 @@ Window {
                         SequentialAnimation on color {
                             running: isRunning && !isAttention
                             loops: Animation.Infinite
-                            ColorAnimation { to: "#3b1a7a"; duration: 1500 }
+                            ColorAnimation { to: "#5b21b6"; duration: 1500 }
                             ColorAnimation { to: "#8b5cf6"; duration: 1500 }
                         }
                         SequentialAnimation on color {
                             running: isBackground && !isRunning && !isAttention
                             loops: Animation.Infinite
-                            ColorAnimation { to: "#0e1827"; duration: 1500 }
+                            ColorAnimation { to: "#1e3a8a"; duration: 1500 }
                             ColorAnimation { to: "#3b82f6"; duration: 1500 }
                         }
                     }
@@ -132,7 +135,7 @@ Window {
                 anchors.centerIn: parent
                 text: "Waiting for Claude Code sessions…"
                 color: "#5e6678"
-                font { family: "Microsoft YaHei UI"; pixelSize: 12 }
+                font { family: "Microsoft YaHei UI"; pixelSize: Math.round(12 * island.sf) }
             }
 
             ListView {
@@ -156,11 +159,12 @@ Window {
                     required property bool   isAttention
                     required property bool   isBackground
                     required property string bgColor
+                    required property string source
                     required property int    index
 
                     width: cardsList.width
                     height: island.cardH
-                    radius: 16
+                    radius: Math.round(16 * island.sf)
                     color: bgColor
                     z: dragH.active ? 2 : 1
                     transform: Translate { y: dragH.active ? (dragH.activeTranslation.y + cardsList.dragComp) : 0 }
@@ -169,7 +173,7 @@ Window {
                         id: dragH
                         target: null
                         acceptedButtons: Qt.LeftButton
-                        dragThreshold: 8
+                        dragThreshold: Math.round(8 * island.sf)
                         onActiveChanged: {
                             bridge.setDragging(active)
                             if (active) {
@@ -203,8 +207,9 @@ Window {
 
                     Rectangle {
                         id: statusDot
-                        width: 8; height: 8; radius: 4
-                        anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
+                        width: Math.round(8 * island.sf); height: Math.round(8 * island.sf)
+                        radius: Math.round(4 * island.sf)
+                        anchors { left: parent.left; leftMargin: Math.round(14 * island.sf); verticalCenter: parent.verticalCenter }
                         color: dotColor
                         SequentialAnimation on color {
                             running: isAttention
@@ -215,13 +220,13 @@ Window {
                         SequentialAnimation on color {
                             running: isRunning && !isAttention
                             loops: Animation.Infinite
-                            ColorAnimation { to: "#3b1a7a"; duration: 1500 }
+                            ColorAnimation { to: "#5b21b6"; duration: 1500 }
                             ColorAnimation { to: "#8b5cf6"; duration: 1500 }
                         }
                         SequentialAnimation on color {
                             running: isBackground && !isRunning && !isAttention
                             loops: Animation.Infinite
-                            ColorAnimation { to: "#0e1827"; duration: 1500 }
+                            ColorAnimation { to: "#1e3a8a"; duration: 1500 }
                             ColorAnimation { to: "#3b82f6"; duration: 1500 }
                         }
                     }
@@ -229,42 +234,50 @@ Window {
                     // Row 1: project name (left) + elapsed (right)
                     Text {
                         id: elapsedText
-                        anchors { right: closeBtn.left; rightMargin: 4; top: parent.top; topMargin: 14 }
+                        anchors { right: closeBtn.left; rightMargin: Math.round(4 * island.sf); top: parent.top; topMargin: Math.round(14 * island.sf) }
                         text: elapsed
                         color: "#5e6678"
-                        font { pixelSize: 10 }
+                        font { pixelSize: Math.round(10 * island.sf) }
+                    }
+
+                    Text {
+                        id: sourceBadge
+                        anchors { left: statusDot.right; leftMargin: Math.round(10 * island.sf); top: parent.top; topMargin: Math.round(17 * island.sf) }
+                        text: source === "codex" ? "CX" : "CC"
+                        color: source === "codex" ? "#7B9FFF" : "#FF8C42"
+                        font { pixelSize: Math.round(9 * island.sf); bold: true }
                     }
 
                     Text {
                         anchors {
-                            left: statusDot.right; leftMargin: 10
-                            right: elapsedText.left; rightMargin: 4
-                            top: parent.top; topMargin: 14
+                            left: sourceBadge.right; leftMargin: Math.round(4 * island.sf)
+                            right: elapsedText.left; rightMargin: Math.round(4 * island.sf)
+                            top: parent.top; topMargin: Math.round(14 * island.sf)
                         }
                         text: cwdName
                         color: "#f2f4f8"
-                        font { family: "Microsoft YaHei UI"; pixelSize: 13; bold: true }
+                        font { family: "Microsoft YaHei UI"; pixelSize: Math.round(13 * island.sf); bold: true }
                         elide: Text.ElideRight
                     }
 
                     // Row 2: last prompt (left)
                     Text {
                         anchors {
-                            left: statusDot.right; leftMargin: 10
-                            right: closeBtn.left; rightMargin: 6
-                            bottom: parent.bottom; bottomMargin: 12
+                            left: statusDot.right; leftMargin: Math.round(10 * island.sf)
+                            right: closeBtn.left; rightMargin: Math.round(6 * island.sf)
+                            bottom: parent.bottom; bottomMargin: Math.round(12 * island.sf)
                         }
                         text: lastPrompt
                         color: "#9aa3b5"
-                        font { family: "Microsoft YaHei UI"; pixelSize: 11 }
+                        font { family: "Microsoft YaHei UI"; pixelSize: Math.round(11 * island.sf) }
                         elide: Text.ElideRight
                         maximumLineCount: 1
                     }
 
                     Item {
                         id: closeBtn
-                        anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-                        width: 30; height: 30
+                        anchors { right: parent.right; rightMargin: Math.round(8 * island.sf); verticalCenter: parent.verticalCenter }
+                        width: Math.round(30 * island.sf); height: Math.round(30 * island.sf)
 
                         HoverHandler { id: closeBtnHover }
 
@@ -279,7 +292,7 @@ Window {
                             anchors.centerIn: parent
                             text: "×"
                             color: closeBtnHover.hovered ? "#e05c5c" : "#5e6678"
-                            font { pixelSize: 18 }
+                            font { pixelSize: Math.round(18 * island.sf) }
                             Behavior on color { ColorAnimation { duration: 120 } }
                         }
 

@@ -22,8 +22,17 @@ from win32 import (
     set_island_mask,
 )
 
-ISLAND_W = 280
-COLLAPSED_H = 20
+_BASE_ISLAND_W = 280
+_BASE_COLLAPSED_H = 20
+
+
+def _get_ui_scale() -> float:
+    try:
+        dpi = ctypes.windll.user32.GetDpiForSystem()
+        win_scale = max(dpi, 96) / 96.0
+        return 1.0 + (win_scale - 1.0) * 0.5  # soften: 150%→1.25, 200%→1.5
+    except Exception:
+        return 1.0
 
 
 class VibeBarApp:
@@ -31,16 +40,21 @@ class VibeBarApp:
         self.qt = QApplication(sys.argv)
         self.qt.setQuitOnLastWindowClosed(False)
 
+        sf = _get_ui_scale()
+        self._island_w = int(_BASE_ISLAND_W * sf)
+        self._collapsed_h = int(_BASE_COLLAPSED_H * sf)
+        self._ui_scale = sf
+
         self._cmd_queue: queue.Queue = queue.Queue()
         self._state_queue: queue.Queue = queue.Queue(maxsize=1)
         self._stop_event = threading.Event()
 
         self.model = SessionsModel()
         self.bridge = IslandBridge(self.model, self._cmd_queue)
-        self.bridge._island_w_logical = ISLAND_W
+        self.bridge._island_w_logical = self._island_w
+        self.bridge._island_h = self._collapsed_h
 
         self._last_finished_at: dict[str, str] = {}
-        self._pending_close_cwds: set[str] = set()
         self._last_phys_wa = None
         self._own_hwnd = 0
         self._reposition_needed = False
@@ -50,6 +64,7 @@ class VibeBarApp:
         ctx = self._engine.rootContext()
         ctx.setContextProperty("sessionsModel", self.model)
         ctx.setContextProperty("bridge", self.bridge)
+        ctx.setContextProperty("scaleFactor", self._ui_scale)
 
         qml = Path(__file__).with_name("island.qml")
         self._engine.load(str(qml))
@@ -79,13 +94,13 @@ class VibeBarApp:
     def _position_window(self) -> None:
         screen = QApplication.primaryScreen()
         ag = screen.availableGeometry()
-        self._win.setProperty("x", ag.left() + (ag.width() - ISLAND_W) // 2)
+        self._win.setProperty("x", ag.left() + (ag.width() - self._island_w) // 2)
         self._win.setProperty("y", ag.top())
-        self._win.setProperty("width", ISLAND_W)
+        self._win.setProperty("width", self._island_w)
         self._win.setProperty("height", ag.height())
         self.bridge._window_h_logical = ag.height()
         if self._own_hwnd:
-            set_island_mask(self._own_hwnd, ag.height(), self.bridge._island_h, ISLAND_W)
+            set_island_mask(self._own_hwnd, ag.height(), self.bridge._island_h, self._island_w)
 
     def _setup_win32(self) -> None:
         hwnd = int(self._win.winId())
@@ -97,7 +112,7 @@ class VibeBarApp:
         color = ctypes.c_uint(DWMWA_COLOR_NONE)
         DwmSetWindowAttribute(wintypes.HWND(hwnd), DWMWA_BORDER_COLOR,
                               ctypes.byref(color), ctypes.sizeof(color))
-        set_island_mask(hwnd, self.bridge._window_h_logical, COLLAPSED_H, ISLAND_W)
+        set_island_mask(hwnd, self.bridge._window_h_logical, self._collapsed_h, self._island_w)
 
     # ── state consumption ─────────────────────────────────────────────────────
 
@@ -113,32 +128,17 @@ class VibeBarApp:
 
     def _apply_state(self, state: dict) -> None:
         all_sessions = state.get("sessions", {}) or {}
-        existing_cwds = {s.get("cwd") for s in all_sessions.values()}
-        self._pending_close_cwds = {c for c in self._pending_close_cwds if c in existing_cwds}
         now_dt = datetime.now()
 
         candidates = {
             sid: s for sid, s in all_sessions.items()
             if s.get("is_primary") and not s.get("user_closed")
             and (s.get("status") == STATUS_RUNNING or _age_sec(s, now_dt) <= FOUR_HOURS_SEC)
+            and not s.get("is_rescue_agent")
+            and not str(s.get("last_prompt") or "").lstrip().startswith("--wait")
         }
 
-        best_by_cwd: dict[str, str] = {}
-        for sid, s in candidates.items():
-            cwd = s.get("cwd", "")
-            if cwd not in best_by_cwd:
-                best_by_cwd[cwd] = sid
-            else:
-                cur = candidates[best_by_cwd[cwd]]
-                s_run = s.get("status") == STATUS_RUNNING
-                cur_run = cur.get("status") == STATUS_RUNNING
-                if s_run and not cur_run:
-                    best_by_cwd[cwd] = sid
-                elif s_run == cur_run and _age_sec(s, now_dt) < _age_sec(cur, now_dt):
-                    best_by_cwd[cwd] = sid
-
-        sessions = {sid: candidates[sid] for sid in best_by_cwd.values()}
-        self.bridge.set_session_cwds({sid: s.get("cwd","") for sid, s in sessions.items()})
+        sessions = candidates
 
         cur_order = self.model.get_order()
         order = [sid for sid in cur_order if sid in sessions]
@@ -191,9 +191,7 @@ class VibeBarApp:
             try:
                 while True:
                     op, payload = self._cmd_queue.get_nowait()
-                    if op == "close_cwd":
-                        self._do_close_cwd(payload)
-                    elif op == "close_session":
+                    if op == "close_session":
                         self._do_close_sid(payload)
             except queue.Empty:
                 pass
@@ -237,19 +235,6 @@ class VibeBarApp:
                 ensure_on_current_desktop(fg, own)
         except Exception:
             pass
-
-    def _do_close_cwd(self, cwd: str) -> None:
-        fd = _acquire_lock()
-        if fd is None: return
-        try:
-            state = read_state()
-            changed = False
-            for sid, s in state.get("sessions", {}).items():
-                if s.get("cwd") == cwd:
-                    s["user_closed"] = True; changed = True
-            if changed: _save_state(state)
-        finally:
-            _release_lock(fd)
 
     def _do_close_sid(self, sid: str) -> None:
         fd = _acquire_lock()

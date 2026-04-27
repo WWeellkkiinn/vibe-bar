@@ -14,6 +14,7 @@ Hover to expand — see which projects are running, what was last asked, and how
 
 - **Live session dots** — purple pulse (running), green (idle), red (needs attention), blue (background task active)
 - **Hover to expand** — per-session cards with project name, last prompt, elapsed time
+- **CC / CX badges** — cards labeled CC (Claude Code, orange) or CX (Codex CLI, blue) so you always know which tool owns a session
 - **Jump to window** — double-click a card to bring VS Code into focus
 - **Drag to reorder** — arrange sessions by priority
 - **Zero taskbar footprint** — uses `SetWindowRgn` so transparent areas pass clicks through
@@ -24,7 +25,7 @@ Hover to expand — see which projects are running, what was last asked, and how
 - Windows 10 or 11
 - Python 3.9+
 - PyQt6 (`pip install PyQt6`)
-- [Claude Code](https://claude.ai/code)
+- [Claude Code](https://claude.ai/code) and/or [Codex CLI](https://github.com/openai/codex)
 
 ## Quick Start
 
@@ -64,6 +65,15 @@ To quit: **right-click double-click** anywhere on the bar.
 | `PermissionRequest` / `Notification` | Red dot — needs attention |
 | `PermissionDenied` | Clear attention flag |
 | `SubagentStart` / `SubagentStop` | Track background agent count (blue dot) |
+
+5. Generates `src/codex_hook.ps1` and injects hooks into `%USERPROFILE%\.codex\hooks.json` + enables `codex_hooks = true` in `%USERPROFILE%\.codex\config.toml` for Codex CLI events:
+
+| Event | Purpose |
+|---|---|
+| `SessionStart` | Register Codex session (CX card) |
+| `UserPromptSubmit` | Mark running, record prompt |
+| `Stop` | Mark idle, return `{"continue": true}` |
+| `PreToolUse` / `PostToolUse` / `PermissionRequest` | Mirror Claude Code behavior |
 
 > **Note:** `install.py` is idempotent — re-running it refreshes hook paths safely without duplicating entries.
 
@@ -121,7 +131,7 @@ cscript.exe vibebar.vbs
 
 ## Roadmap
 
-- [ ] **Codex CLI support** — Codex runs as a separate process outside the Claude Code hook system. Tracking its lifecycle is a planned future addition.
+- [x] **Codex CLI support** — CC/CX badges, separate cards per tool, shared `state.json`
 
 ## Star History
 
