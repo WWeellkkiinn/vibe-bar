@@ -177,6 +177,7 @@ def main() -> int:
             sess.pop("user_closed", None)
             sess["needs_attention"] = False
             sess["status"] = "running"
+            sess["active_subagent_count"] = 0  # reset orphaned counts at turn start
             prompt = str(payload.get("prompt", "") or "")
             sess["last_prompt"] = prompt[:80]
             sess["prompt_at"] = _now_iso()
@@ -205,7 +206,8 @@ def main() -> int:
             sess["status"] = "idle"
             sess["finished_at"] = _now_iso()
             sess["active_bash"] = False
-            sess["active_subagent_count"] = 0
+            # Do NOT reset active_subagent_count here — SubagentStart/SubagentStop own it.
+            # Resetting here caused a brief green flash before SubagentStart could fire.
             sess["needs_attention"] = False
         elif event == "SubagentStart" and source_name != "codex":
             sess["active_subagent_count"] = max(0, sess.get("active_subagent_count", 0)) + 1

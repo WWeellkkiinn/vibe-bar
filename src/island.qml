@@ -19,8 +19,13 @@ Window {
         property int  bodyPadding: 0
         property int  cardH: Math.round(60 * sf)
         property int  cardSpacing: Math.round(8 * sf)
-        // slotH = card + spacing: each delegate owns its own spacing so height=0 removes spacing too
         property int  slotH: cardH + cardSpacing
+        property real animPhase: 0  // shared pulse phase — all dots sync to this
+        SequentialAnimation on animPhase {
+            running: true; loops: Animation.Infinite
+            NumberAnimation { to: 1; duration: 1500; easing.type: Easing.InOutSine }
+            NumberAnimation { to: 0; duration: 1500; easing.type: Easing.InOutSine }
+        }
         property int  displayCount: 0
         property int  visibleRows: Math.max(1, Math.min(displayCount, 10))
         property int  expandedH: bodyPadding * 2 + visibleRows * slotH
@@ -110,21 +115,15 @@ Window {
                         width: Math.round(10 * island.sf); height: Math.round(10 * island.sf)
                         radius: Math.round(5 * island.sf)
                         anchors.verticalCenter: parent.verticalCenter
-                        color: dotColor
-                        SequentialAnimation on color {
-                            running: isAttention; loops: Animation.Infinite
-                            ColorAnimation { to: "#7a1a1a"; duration: 1500 }
-                            ColorAnimation { to: "#ef4444"; duration: 1500 }
-                        }
-                        SequentialAnimation on color {
-                            running: isRunning && !isAttention; loops: Animation.Infinite
-                            ColorAnimation { to: "#5b21b6"; duration: 1500 }
-                            ColorAnimation { to: "#8b5cf6"; duration: 1500 }
-                        }
-                        SequentialAnimation on color {
-                            running: isBackground && !isRunning && !isAttention; loops: Animation.Infinite
-                            ColorAnimation { to: "#1e3a8a"; duration: 1500 }
-                            ColorAnimation { to: "#3b82f6"; duration: 1500 }
+                        color: {
+                            var p = island.animPhase
+                            if (isAttention)
+                                return Qt.rgba((122+117*p)/255, (26+42*p)/255, (26+42*p)/255, 1)
+                            if (isRunning)
+                                return Qt.rgba((91+48*p)/255, (33+59*p)/255, (182+64*p)/255, 1)
+                            if (isBackground)
+                                return Qt.rgba((30+29*p)/255, (58+72*p)/255, (138+108*p)/255, 1)
+                            return dotColor
                         }
                     }
                 }
@@ -248,21 +247,15 @@ Window {
                             width: Math.round(8 * island.sf); height: Math.round(8 * island.sf)
                             radius: Math.round(4 * island.sf)
                             anchors { left: parent.left; leftMargin: Math.round(14 * island.sf); verticalCenter: parent.verticalCenter }
-                            color: dotColor
-                            SequentialAnimation on color {
-                                running: isAttention; loops: Animation.Infinite
-                                ColorAnimation { to: "#7a1a1a"; duration: 1500 }
-                                ColorAnimation { to: "#ef4444"; duration: 1500 }
-                            }
-                            SequentialAnimation on color {
-                                running: isRunning && !isAttention; loops: Animation.Infinite
-                                ColorAnimation { to: "#5b21b6"; duration: 1500 }
-                                ColorAnimation { to: "#8b5cf6"; duration: 1500 }
-                            }
-                            SequentialAnimation on color {
-                                running: isBackground && !isRunning && !isAttention; loops: Animation.Infinite
-                                ColorAnimation { to: "#1e3a8a"; duration: 1500 }
-                                ColorAnimation { to: "#3b82f6"; duration: 1500 }
+                            color: {
+                                var p = island.animPhase
+                                if (isAttention)
+                                    return Qt.rgba((122+117*p)/255, (26+42*p)/255, (26+42*p)/255, 1)
+                                if (isRunning)
+                                    return Qt.rgba((91+48*p)/255, (33+59*p)/255, (182+64*p)/255, 1)
+                                if (isBackground)
+                                    return Qt.rgba((30+29*p)/255, (58+72*p)/255, (138+108*p)/255, 1)
+                                return dotColor
                             }
                         }
 
