@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-Windows 悬浮条，Dynamic Island 风格，实时展示所有 Claude Code 会话状态。
+Windows 悬浮条，Dynamic Island 风格，实时展示所有 Claude Code 和 Codex CLI 会话状态。
 
 悬停展开 — 查看哪些项目在运行、最近问了什么、距今多久。双击卡片跳转到对应 VS Code 窗口，拖拽排序。
 

@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-A Dynamic Island–style floating bar for Windows that shows all your Claude Code sessions at a glance.
+A Dynamic Island–style floating bar for Windows that shows all your Claude Code and Codex CLI sessions at a glance.
 
 Hover to expand — see which projects are running, what was last asked, and how long ago. Double-click a card to jump to that VS Code window. Drag cards to reorder.
 
