@@ -232,6 +232,8 @@ class SessionsModel(QAbstractListModel):
 
 
 class IslandBridge(QObject):
+    collapseRequested = pyqtSignal()
+
     def __init__(self, model: SessionsModel, cmd_queue: queue.Queue, parent=None):
         super().__init__(parent)
         self._model = model
@@ -329,7 +331,10 @@ class IslandBridge(QObject):
         anim.setDuration(250)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         anim.setEndValue(target)
-        anim.finished.connect(lambda t=target: _save_island_x(t))
+        if at_edge:
+            anim.finished.connect(lambda t=target: (_save_island_x(t), self.collapseRequested.emit()))
+        else:
+            anim.finished.connect(lambda t=target: _save_island_x(t))
         anim.start()
         self._snap_anim = anim
 

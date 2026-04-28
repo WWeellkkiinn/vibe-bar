@@ -33,6 +33,11 @@ Window {
         Component.onCompleted: displayCount = sessionsModel.sessionCount
 
         Connections {
+            target: bridge
+            function onCollapseRequested() { island.expanded = false }
+        }
+
+        Connections {
             target: sessionsModel
             function onCountChanged() {
                 if (sessionsModel.sessionCount < island.displayCount)
