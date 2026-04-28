@@ -19,7 +19,7 @@ LOCK_ACQUIRE_TIMEOUT_SEC = 0.3
 LOCK_STALE_AGE_SEC = 5.0
 STALE_RUNNING_THRESHOLD_SEC = 600   # 10 min — non-primary sessions that stop sending hooks
 STALE_IDLE_PURGE_SEC = 86400        # 24 h — remove very old idle sessions
-RESCUE_PENDING_TTL = 10             # seconds — SubagentStart → Codex SessionStart window
+RESCUE_PENDING_TTL = 60             # seconds — SubagentStart → Codex SessionStart window
 
 
 def _now_iso() -> str:
