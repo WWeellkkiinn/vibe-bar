@@ -64,7 +64,7 @@ cscript.exe vibebar.vbs
 | `PostToolUse` / `PostToolUseFailure` | 清除 Bash 活动标记 |
 | `PermissionRequest` / `Notification` | 红点，需要关注 |
 | `PermissionDenied` | 清除关注标记 |
-| `SubagentStart` / `SubagentStop` | 追踪后台代理数量（蓝点）；若 `agent_type` 含 `codex`，预标记即将到来的 Codex 会话为 rescue agent（保持隐藏） |
+| `SubagentStart` / `SubagentStop` | 追踪后台代理数量（蓝点）；若 `agent_type` 含 `codex`，按 `cwd` 写入一条 pending 记录（10 秒内有效），下一个相同 cwd 的 Codex `SessionStart` 消费后自动标为隐藏 |
 
 5. 生成 `src/codex_hook.ps1` 并注入 `%USERPROFILE%\.codex\hooks.json`，同时在 `%USERPROFILE%\.codex\config.toml` 中启用 `codex_hooks = true`：
 

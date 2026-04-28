@@ -64,7 +64,7 @@ To quit: **right-click double-click** anywhere on the bar.
 | `PostToolUse` / `PostToolUseFailure` | Clear Bash activity flag |
 | `PermissionRequest` / `Notification` | Red dot — needs attention |
 | `PermissionDenied` | Clear attention flag |
-| `SubagentStart` / `SubagentStop` | Track background agent count (blue dot); if `agent_type` contains `codex`, pre-mark the incoming Codex session as a rescue agent so it stays hidden |
+| `SubagentStart` / `SubagentStop` | Track background agent count (blue dot); if `agent_type` contains `codex`, record a pending rescue entry (keyed by `cwd`, expires in 10 s) so the next Codex `SessionStart` for that cwd auto-hides itself |
 
 5. Generates `src/codex_hook.ps1` and injects hooks into `%USERPROFILE%\.codex\hooks.json` + enables `codex_hooks = true` in `%USERPROFILE%\.codex\config.toml` for Codex CLI events:
 

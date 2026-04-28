@@ -237,7 +237,7 @@ def main() -> int:
             sess["active_subagent_count"] = max(0, sess.get("active_subagent_count", 0)) + 1
             # Pre-announce rescue: record pending entry so Codex SessionStart can self-identify
             agent_type = str(payload.get("agent_type", ""))
-            if "codex" in agent_type.lower():
+            if "codex" in agent_type.lower() and cwd:
                 pending = state.setdefault("_pending_rescues", [])
                 pending.append({"ts": _now_iso(), "cwd": cwd})
         elif event == "SubagentStop" and source_name != "codex":
