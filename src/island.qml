@@ -119,7 +119,7 @@ Window {
             height: island.collapsedH
             width: Math.max(Math.round(10 * island.sf), dotRow.implicitWidth)
             opacity: island.expanded ? 0.0 : 1.0
-            Behavior on opacity { NumberAnimation { duration: 120 } }
+            Behavior on opacity { NumberAnimation { duration: island.expanded ? 120 : 280 } }
 
             Row {
                 id: dotRow
@@ -164,7 +164,7 @@ Window {
             id: expandedArea
             anchors { fill: parent; margins: island.bodyPadding }
             enabled: island.expanded
-            opacity: island.expanded ? 1.0 : 0.0
+            opacity: (island.expanded || island.height > island.collapsedH) ? 1.0 : 0.0
 
             Text {
                 visible: sessionsModel.sessionCount === 0
