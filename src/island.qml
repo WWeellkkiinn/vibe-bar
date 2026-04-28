@@ -34,7 +34,7 @@ Window {
 
         Connections {
             target: bridge
-            function onCollapseRequested() { island.expanded = false }
+            function onCollapseRequested() { expandTimer.stop(); island.expanded = false }
         }
 
         Connections {
