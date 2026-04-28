@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtCore import QAbstractListModel, QModelIndex, Qt, pyqtSlot, QObject, pyqtSignal, pyqtProperty, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QCursor
+from PyQt6.QtWidgets import QApplication
 
 STATE_PATH     = Path(os.environ["LOCALAPPDATA"]) / "VibeBar" / "state.json"
 UI_CONFIG_PATH = Path(os.environ["LOCALAPPDATA"]) / "VibeBar" / "ui_config.json"
@@ -243,6 +245,8 @@ class IslandBridge(QObject):
         self._snap_anim: QPropertyAnimation | None = None
         self._drag_cursor_offset: int = 0
         self._last_drag_x: int = 0
+        self._drag_ag_left: int = 0
+        self._drag_ag_right: int = 1920
 
     def _update_mask(self, h: int) -> None:
         if self._own_hwnd and self._window_h_logical and self._island_w_logical:
@@ -279,14 +283,19 @@ class IslandBridge(QObject):
         except queue.Full:
             pass
 
-    @pyqtSlot()
-    def startIslandDrag(self) -> None:
+    def _stop_snap_anim(self) -> None:
         if self._snap_anim:
             try: self._snap_anim.finished.disconnect()
             except Exception: pass
             self._snap_anim.stop()
             self._snap_anim = None
-        from PyQt6.QtGui import QCursor
+
+    @pyqtSlot()
+    def startIslandDrag(self) -> None:
+        self._stop_snap_anim()
+        ag = QApplication.primaryScreen().availableGeometry()
+        self._drag_ag_left = ag.left()
+        self._drag_ag_right = ag.right()
         cx = QCursor.pos().x()
         win_x = int(self._win.property("x")) if self._win else 0
         self._drag_cursor_offset = cx - win_x
@@ -296,13 +305,9 @@ class IslandBridge(QObject):
     def moveIslandX(self) -> None:
         if not self._win:
             return
-        from PyQt6.QtGui import QCursor
-        from PyQt6.QtWidgets import QApplication
         cx = QCursor.pos().x()
         x = cx - self._drag_cursor_offset
-        ag = QApplication.primaryScreen().availableGeometry()
-        iw = self._island_w_logical
-        x = max(ag.left(), min(x, ag.right() - iw))
+        x = max(self._drag_ag_left, min(x, self._drag_ag_right - self._island_w_logical))
         self._last_drag_x = x
         self._win.setProperty("x", x)
 
@@ -314,16 +319,12 @@ class IslandBridge(QObject):
     def snapIslandX(self, x: int) -> None:
         if not self._win:
             return
-        from PyQt6.QtWidgets import QApplication
         ag = QApplication.primaryScreen().availableGeometry()
         iw = self._island_w_logical
         center = ag.left() + (ag.width() - iw) // 2
         at_edge = x <= ag.left() or x >= ag.right() - iw
         target = center if at_edge else max(ag.left(), min(x, ag.right() - iw))
-        if self._snap_anim:
-            try: self._snap_anim.finished.disconnect()
-            except Exception: pass
-            self._snap_anim.stop()
+        self._stop_snap_anim()
         anim = QPropertyAnimation(self._win, b"x")
         anim.setDuration(250)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)

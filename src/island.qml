@@ -78,7 +78,7 @@ Window {
             id: hoverHandler
             onHoveredChanged: {
                 if (hovered) { leaveTimer.stop(); expandTimer.restart() }
-                else          { expandTimer.stop(); if (!islandDragH.active) leaveTimer.restart() }
+                else          { expandTimer.stop(); if (!islandDragH.active && !cardsList.cardHorzDragging) leaveTimer.restart() }
             }
         }
         Timer { id: leaveTimer;  interval: 400; onTriggered: island.expanded = false }
@@ -178,6 +178,7 @@ Window {
 
                 property real dragComp: 0
                 property int  dragSlot: -1
+                property bool cardHorzDragging: false
 
                 // ── Card delegate ─────────────────────────────────────────────
                 delegate: Item {
@@ -247,8 +248,9 @@ Window {
                                     cardsList.dragComp = 0
                                 } else {
                                     if (_mode === 1) bridge.endIslandDrag()
-                                    _mode = 0
                                     cardsList.dragSlot = -1
+                                    cardsList.cardHorzDragging = false
+                                    _mode = 0
                                 }
                             }
                             onActiveTranslationChanged: {
@@ -256,7 +258,7 @@ Window {
                                 if (_mode === 0) {
                                     var ax = Math.abs(activeTranslation.x)
                                     var ay = Math.abs(activeTranslation.y)
-                                    if (ax > ay)      { _mode = 1; bridge.startIslandDrag() }
+                                    if (ax > ay)      { _mode = 1; cardsList.cardHorzDragging = true; bridge.startIslandDrag() }
                                     else if (ay > ax) { _mode = 2 }
                                     return
                                 }
