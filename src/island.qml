@@ -17,6 +17,7 @@ Window {
         property bool expanded: false
         property int  collapsedH: Math.round(20 * sf)
         property int  bodyPadding: 0
+        property int  animDur: 280
         property int  cardH: Math.round(60 * sf)
         property int  cardSpacing: Math.round(8 * sf)
         property int  slotH: cardH + cardSpacing
@@ -54,7 +55,7 @@ Window {
 
         height: expanded ? expandedH : collapsedH
         Behavior on height {
-            NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: island.animDur; easing.type: Easing.OutCubic }
         }
 
         Timer {
@@ -119,7 +120,7 @@ Window {
             height: island.collapsedH
             width: Math.max(Math.round(10 * island.sf), dotRow.implicitWidth)
             opacity: island.expanded ? 0.0 : 1.0
-            Behavior on opacity { NumberAnimation { duration: island.expanded ? 120 : 280 } }
+            Behavior on opacity { NumberAnimation { duration: island.expanded ? 120 : island.animDur } }
 
             Row {
                 id: dotRow
@@ -164,6 +165,7 @@ Window {
             id: expandedArea
             anchors { fill: parent; margins: island.bodyPadding }
             enabled: island.expanded
+            // Stay visible during collapse animation (height > collapsedH); show immediately on expand
             opacity: (island.expanded || island.height > island.collapsedH) ? 1.0 : 0.0
 
             Text {
