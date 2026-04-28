@@ -133,6 +133,7 @@ cscript.exe vibebar.vbs
 ## Roadmap
 
 - [x] **Codex CLI support** — CC/CX badges, separate cards per tool, shared `state.json`
+- [x] **Free positioning** — drag the bar left or right, snap back to center at screen edges, position persists across restarts
 
 ## Star History
 
