@@ -64,13 +64,13 @@ cscript.exe vibebar.vbs
 | `PostToolUse` / `PostToolUseFailure` | 清除 Bash 活动标记 |
 | `PermissionRequest` / `Notification` | 红点，需要关注 |
 | `PermissionDenied` | 清除关注标记 |
-| `SubagentStart` / `SubagentStop` | 追踪后台代理数量（蓝点） |
+| `SubagentStart` / `SubagentStop` | 追踪后台代理数量（蓝点）；若 `agent_type` 含 `codex`，预标记即将到来的 Codex 会话为 rescue agent（保持隐藏） |
 
 5. 生成 `src/codex_hook.ps1` 并注入 `%USERPROFILE%\.codex\hooks.json`，同时在 `%USERPROFILE%\.codex\config.toml` 中启用 `codex_hooks = true`：
 
 | 事件 | 用途 |
 |---|---|
-| `SessionStart` | 注册 Codex 会话（CX 卡片） |
+| `SessionStart` | 注册 Codex 会话（CX 卡片）；若被 `SubagentStart` 预标记为 rescue agent 则自动隐藏 |
 | `UserPromptSubmit` | 标记运行中，记录提示词 |
 | `Stop` | 标记空闲，返回 `{"continue": true}` |
 | `PreToolUse` / `PostToolUse` / `PermissionRequest` | 同步 Claude Code 行为 |

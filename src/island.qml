@@ -28,7 +28,7 @@ Window {
         }
         property int  displayCount: 0
         property int  visibleRows: Math.max(1, Math.min(displayCount, 10))
-        property int  expandedH: bodyPadding * 2 + visibleRows * slotH
+        property int  expandedH: bodyPadding * 2 + visibleRows * slotH + slotH
 
         Component.onCompleted: displayCount = sessionsModel.sessionCount
 

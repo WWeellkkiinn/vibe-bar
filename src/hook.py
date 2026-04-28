@@ -19,6 +19,7 @@ LOCK_ACQUIRE_TIMEOUT_SEC = 0.3
 LOCK_STALE_AGE_SEC = 5.0
 STALE_RUNNING_THRESHOLD_SEC = 600   # 10 min — non-primary sessions that stop sending hooks
 STALE_IDLE_PURGE_SEC = 86400        # 24 h — remove very old idle sessions
+RESCUE_PENDING_TTL = 10             # seconds — SubagentStart → Codex SessionStart window
 
 
 def _now_iso() -> str:
@@ -64,6 +65,21 @@ def cleanup_stale_sessions(state: dict) -> None:
             to_delete.append(sid)
     for sid in to_delete:
         del sessions[sid]
+    # Purge expired pending rescue entries
+    pending = state.get("_pending_rescues", [])
+    if pending:
+        cutoff = now.timestamp() - RESCUE_PENDING_TTL
+        state["_pending_rescues"] = [
+            p for p in pending
+            if _ts_to_epoch(p.get("ts", "")) > cutoff
+        ]
+
+
+def _ts_to_epoch(iso_ts: str) -> float:
+    try:
+        return datetime.fromisoformat(iso_ts).timestamp()
+    except Exception:
+        return 0.0
 
 
 def load_state() -> dict:
@@ -161,8 +177,15 @@ def main() -> int:
             if payload.get("model"):
                 sess["model"] = payload.get("model")
             if source_name == "codex":
-                # If another active CX already exists for this cwd, stay hidden until
-                # UserPromptSubmit confirms it's a real user session (not a rescue agent)
+                # Check if Claude pre-announced a rescue spawn for this cwd via SubagentStart
+                pending = state.get("_pending_rescues", [])
+                matched = next(
+                    (p for p in pending if p.get("cwd") == cwd),
+                    None,
+                )
+                if matched:
+                    sess["is_rescue_agent"] = True
+                    state["_pending_rescues"] = [p for p in pending if p is not matched]
                 has_active_cx = any(
                     s.get("source") == "codex" and s.get("cwd") == cwd
                     and s.get("is_primary") and not s.get("user_closed") and k != sid
@@ -185,7 +208,8 @@ def main() -> int:
             _p = prompt.lstrip()
             if source_name == "codex" and (_p.startswith("--wait") or _p.startswith("<task>")):
                 sess["is_rescue_agent"] = True
-            else:
+            elif not sess.get("is_rescue_agent"):
+                # Only upgrade to visible if not already marked as rescue via SubagentStart
                 sess.pop("is_rescue_agent", None)
                 if source_name == "codex":
                     sess["is_primary"] = True  # upgrade hidden CX to visible on real prompt
@@ -211,6 +235,11 @@ def main() -> int:
             sess["needs_attention"] = False
         elif event == "SubagentStart" and source_name != "codex":
             sess["active_subagent_count"] = max(0, sess.get("active_subagent_count", 0)) + 1
+            # Pre-announce rescue: record pending entry so Codex SessionStart can self-identify
+            agent_type = str(payload.get("agent_type", ""))
+            if "codex" in agent_type.lower():
+                pending = state.setdefault("_pending_rescues", [])
+                pending.append({"ts": _now_iso(), "cwd": cwd})
         elif event == "SubagentStop" and source_name != "codex":
             sess["active_subagent_count"] = max(0, sess.get("active_subagent_count", 0) - 1)
         elif event == "PreToolUse" and payload.get("tool_name") == "Bash":

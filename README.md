@@ -64,13 +64,13 @@ To quit: **right-click double-click** anywhere on the bar.
 | `PostToolUse` / `PostToolUseFailure` | Clear Bash activity flag |
 | `PermissionRequest` / `Notification` | Red dot — needs attention |
 | `PermissionDenied` | Clear attention flag |
-| `SubagentStart` / `SubagentStop` | Track background agent count (blue dot) |
+| `SubagentStart` / `SubagentStop` | Track background agent count (blue dot); if `agent_type` contains `codex`, pre-mark the incoming Codex session as a rescue agent so it stays hidden |
 
 5. Generates `src/codex_hook.ps1` and injects hooks into `%USERPROFILE%\.codex\hooks.json` + enables `codex_hooks = true` in `%USERPROFILE%\.codex\config.toml` for Codex CLI events:
 
 | Event | Purpose |
 |---|---|
-| `SessionStart` | Register Codex session (CX card) |
+| `SessionStart` | Register Codex session (CX card); auto-hidden if pre-marked as rescue agent via `SubagentStart` |
 | `UserPromptSubmit` | Mark running, record prompt |
 | `Stop` | Mark idle, return `{"continue": true}` |
 | `PreToolUse` / `PostToolUse` / `PermissionRequest` | Mirror Claude Code behavior |
