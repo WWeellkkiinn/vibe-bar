@@ -368,7 +368,7 @@ def find_vscode_hwnd_for_cwd(cwd: str) -> int:
             buf = ctypes.create_unicode_buffer(length + 1)
             user32.GetWindowTextW(hwnd, buf, length + 1)
             title = buf.value or ""
-            if title.endswith(suffix) and (middle in title or title == short):
+            if suffix in title and (middle in title or title.startswith(short)):
                 matches.append(int(hwnd))
         except Exception:
             pass
