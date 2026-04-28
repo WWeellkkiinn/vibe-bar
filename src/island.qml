@@ -134,6 +134,7 @@ Window {
         Item {
             id: expandedArea
             anchors { fill: parent; margins: island.bodyPadding }
+            clip: true
             opacity: island.expanded ? 1.0 : 0.0
             Behavior on opacity { NumberAnimation { duration: 150 } }
 
