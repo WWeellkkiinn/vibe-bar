@@ -77,11 +77,35 @@ Window {
         HoverHandler {
             id: hoverHandler
             onHoveredChanged: {
-                if (hovered) { leaveTimer.stop(); island.expanded = true }
-                else          { leaveTimer.restart() }
+                if (hovered) { leaveTimer.stop(); expandTimer.restart() }
+                else          { expandTimer.stop(); if (!islandDragH.active) leaveTimer.restart() }
             }
         }
-        Timer { id: leaveTimer; interval: 400; onTriggered: island.expanded = false }
+        Timer { id: leaveTimer;  interval: 400; onTriggered: island.expanded = false }
+        Timer { id: expandTimer; interval: 150; onTriggered: island.expanded = true  }
+
+        DragHandler {
+            id: islandDragH
+            target: null
+            acceptedButtons: Qt.LeftButton
+            dragThreshold: Math.round(8 * island.sf)
+            xAxis.enabled: true
+            yAxis.enabled: false
+            enabled: !island.expanded
+            onActiveChanged: {
+                if (active) {
+                    expandTimer.stop()
+                    bridge.startIslandDrag()
+                } else {
+                    bridge.endIslandDrag()
+                    if (hoverHandler.hovered) expandTimer.restart()
+                    else leaveTimer.restart()
+                }
+            }
+            onActiveTranslationChanged: {
+                if (active) bridge.moveIslandX()
+            }
+        }
 
         // ── Collapsed: dot strip ──────────────────────────────────────────────
         Item {
@@ -134,6 +158,7 @@ Window {
         Item {
             id: expandedArea
             anchors { fill: parent; margins: island.bodyPadding }
+            enabled: island.expanded
             opacity: island.expanded ? 1.0 : 0.0
 
             Text {
@@ -206,26 +231,47 @@ Window {
                         anchors.top: parent.top
                         radius: Math.round(16 * island.sf)
                         color: bgColor
-                        transform: Translate { y: dragH.active ? (dragH.activeTranslation.y + cardsList.dragComp) : 0 }
+                        transform: Translate { y: (dragH.active && dragH._mode === 2) ? (dragH.activeTranslation.y + cardsList.dragComp) : 0 }
 
                         DragHandler {
                             id: dragH
                             target: null
                             acceptedButtons: Qt.LeftButton
                             dragThreshold: Math.round(8 * island.sf)
+                            property int _mode: 0  // 0=undecided 1=island-move 2=card-sort
                             onActiveChanged: {
                                 bridge.setDragging(active)
-                                if (active) { cardsList.dragSlot = index; cardsList.dragComp = 0 }
+                                if (active) {
+                                    _mode = 0
+                                    cardsList.dragSlot = index
+                                    cardsList.dragComp = 0
+                                } else {
+                                    if (_mode === 1) bridge.endIslandDrag()
+                                    _mode = 0
+                                    cardsList.dragSlot = -1
+                                }
                             }
                             onActiveTranslationChanged: {
-                                if (!active || cardsList.dragSlot < 0) return
-                                var visualY = cardsList.dragSlot * island.slotH + activeTranslation.y + cardsList.dragComp
-                                var newSlot = Math.max(0, Math.min(sessionsModel.sessionCount - 1,
-                                                                   Math.round(visualY / island.slotH)))
-                                if (newSlot !== cardsList.dragSlot) {
-                                    cardsList.dragComp += (cardsList.dragSlot - newSlot) * island.slotH
-                                    bridge.moveSessionByIndex(cardsList.dragSlot, newSlot)
-                                    cardsList.dragSlot = newSlot
+                                if (!active) return
+                                if (_mode === 0) {
+                                    var ax = Math.abs(activeTranslation.x)
+                                    var ay = Math.abs(activeTranslation.y)
+                                    if (ax > ay)      { _mode = 1; bridge.startIslandDrag() }
+                                    else if (ay > ax) { _mode = 2 }
+                                    return
+                                }
+                                if (_mode === 1) {
+                                    bridge.moveIslandX()
+                                } else {
+                                    if (cardsList.dragSlot < 0) return
+                                    var visualY = cardsList.dragSlot * island.slotH + activeTranslation.y + cardsList.dragComp
+                                    var newSlot = Math.max(0, Math.min(sessionsModel.sessionCount - 1,
+                                                                       Math.round(visualY / island.slotH)))
+                                    if (newSlot !== cardsList.dragSlot) {
+                                        cardsList.dragComp += (cardsList.dragSlot - newSlot) * island.slotH
+                                        bridge.moveSessionByIndex(cardsList.dragSlot, newSlot)
+                                        cardsList.dragSlot = newSlot
+                                    }
                                 }
                             }
                         }

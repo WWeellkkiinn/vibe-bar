@@ -13,6 +13,7 @@ from models import (
     read_state, _save_state, _acquire_lock, _release_lock, _age_sec,
     STATUS_RUNNING, STATUS_IDLE,
     FOUR_HOURS_SEC, IDLE_PURGE_SEC, STALE_RUNNING_SEC,
+    load_ui_config,
 )
 from win32 import (
     ensure_on_current_desktop, get_primary_work_area,
@@ -73,6 +74,7 @@ class VibeBarApp:
         if not roots:
             sys.exit(1)
         self._win = roots[0]
+        self.bridge._win = self._win
         self._position_window()
         QTimer.singleShot(200, self._setup_win32)
 
@@ -94,7 +96,10 @@ class VibeBarApp:
     def _position_window(self) -> None:
         screen = QApplication.primaryScreen()
         ag = screen.availableGeometry()
-        self._win.setProperty("x", ag.left() + (ag.width() - self._island_w) // 2)
+        saved_x = load_ui_config().get("island_x")
+        default_x = ag.left() + (ag.width() - self._island_w) // 2
+        x = max(ag.left(), min(int(saved_x), ag.right() - self._island_w)) if saved_x is not None else default_x
+        self._win.setProperty("x", x)
         self._win.setProperty("y", ag.top())
         self._win.setProperty("width", self._island_w)
         self._win.setProperty("height", ag.height())

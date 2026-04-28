@@ -3,9 +3,10 @@ import json, os, queue, time
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QAbstractListModel, QModelIndex, Qt, pyqtSlot, QObject, pyqtSignal, pyqtProperty
+from PyQt6.QtCore import QAbstractListModel, QModelIndex, Qt, pyqtSlot, QObject, pyqtSignal, pyqtProperty, QPropertyAnimation, QEasingCurve
 
-STATE_PATH = Path(os.environ["LOCALAPPDATA"]) / "VibeBar" / "state.json"
+STATE_PATH     = Path(os.environ["LOCALAPPDATA"]) / "VibeBar" / "state.json"
+UI_CONFIG_PATH = Path(os.environ["LOCALAPPDATA"]) / "VibeBar" / "ui_config.json"
 LOCK_PATH  = STATE_PATH.with_suffix(".lock")
 
 STATUS_RUNNING = "running"
@@ -43,6 +44,21 @@ def _release_lock(fd) -> None:
         try: os.close(fd)
         except Exception: pass
     LOCK_PATH.unlink(missing_ok=True)
+
+def load_ui_config() -> dict:
+    try: return json.loads(UI_CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception: return {}
+
+def _save_island_x(x: int) -> None:
+    try:
+        UI_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        cfg = load_ui_config()
+        cfg["island_x"] = x
+        tmp = UI_CONFIG_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cfg), encoding="utf-8")
+        tmp.replace(UI_CONFIG_PATH)
+    except Exception:
+        pass
 
 def read_state() -> dict:
     try: return json.loads(STATE_PATH.read_text(encoding="utf-8"))
@@ -223,6 +239,10 @@ class IslandBridge(QObject):
         self._window_h_logical: int = 0
         self._island_w_logical: int = 0
         self._is_dragging: bool = False
+        self._win = None
+        self._snap_anim: QPropertyAnimation | None = None
+        self._drag_cursor_offset: int = 0
+        self._last_drag_x: int = 0
 
     def _update_mask(self, h: int) -> None:
         if self._own_hwnd and self._window_h_logical and self._island_w_logical:
@@ -258,6 +278,59 @@ class IslandBridge(QObject):
             self._cmd_queue.put_nowait(("close_session", sid))
         except queue.Full:
             pass
+
+    @pyqtSlot()
+    def startIslandDrag(self) -> None:
+        if self._snap_anim:
+            try: self._snap_anim.finished.disconnect()
+            except Exception: pass
+            self._snap_anim.stop()
+            self._snap_anim = None
+        from PyQt6.QtGui import QCursor
+        cx = QCursor.pos().x()
+        win_x = int(self._win.property("x")) if self._win else 0
+        self._drag_cursor_offset = cx - win_x
+        self._last_drag_x = win_x
+
+    @pyqtSlot()
+    def moveIslandX(self) -> None:
+        if not self._win:
+            return
+        from PyQt6.QtGui import QCursor
+        from PyQt6.QtWidgets import QApplication
+        cx = QCursor.pos().x()
+        x = cx - self._drag_cursor_offset
+        ag = QApplication.primaryScreen().availableGeometry()
+        iw = self._island_w_logical
+        x = max(ag.left(), min(x, ag.right() - iw))
+        self._last_drag_x = x
+        self._win.setProperty("x", x)
+
+    @pyqtSlot()
+    def endIslandDrag(self) -> None:
+        self.snapIslandX(self._last_drag_x)
+
+    @pyqtSlot(int)
+    def snapIslandX(self, x: int) -> None:
+        if not self._win:
+            return
+        from PyQt6.QtWidgets import QApplication
+        ag = QApplication.primaryScreen().availableGeometry()
+        iw = self._island_w_logical
+        center = ag.left() + (ag.width() - iw) // 2
+        at_edge = x <= ag.left() or x >= ag.right() - iw
+        target = center if at_edge else max(ag.left(), min(x, ag.right() - iw))
+        if self._snap_anim:
+            try: self._snap_anim.finished.disconnect()
+            except Exception: pass
+            self._snap_anim.stop()
+        anim = QPropertyAnimation(self._win, b"x")
+        anim.setDuration(250)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.setEndValue(target)
+        anim.finished.connect(lambda t=target: _save_island_x(t))
+        anim.start()
+        self._snap_anim = anim
 
     @pyqtSlot(bool)
     def setDragging(self, v: bool) -> None:
