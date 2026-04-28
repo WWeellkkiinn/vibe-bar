@@ -28,7 +28,7 @@ Window {
         }
         property int  displayCount: 0
         property int  visibleRows: Math.max(1, Math.min(displayCount, 10))
-        property int  expandedH: bodyPadding * 2 + visibleRows * slotH + slotH
+        property int  expandedH: bodyPadding * 2 + visibleRows * slotH
 
         Component.onCompleted: displayCount = sessionsModel.sessionCount
 
@@ -197,7 +197,10 @@ Window {
                     Timer {
                         id: closeTimer
                         interval: 280
-                        onTriggered: bridge.closeSession(cardDelegate.sid)
+                        onTriggered: {
+                            if (island.displayCount > 1) island.displayCount -= 1
+                            bridge.closeSession(cardDelegate.sid)
+                        }
                     }
 
                     // ── Visual card (cardH tall, sits at top of slotH delegate) ──
@@ -327,7 +330,6 @@ Window {
                                 onTapped: {
                                     if (cardDelegate._closing) return
                                     cardDelegate._closing = true
-                                    if (island.displayCount > 1) island.displayCount -= 1
                                     closeTimer.start()
                                 }
                             }
