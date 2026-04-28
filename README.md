@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 A Dynamic Island–style floating bar for Windows that shows all your Claude Code and Codex CLI sessions at a glance.
 
-Hover to expand — see which projects are running, what was last asked, and how long ago. Double-click a card to jump to that VS Code window. Drag cards to reorder.
+Hover to expand — see which projects are running, what was last asked, and how long ago. Double-click a card to jump to that VS Code window. Drag cards to reorder. Slide left or right to reposition the bar — drag it to a screen edge and it snaps back to center.
 
 <div align="center">
   <img src="VibeBar.gif" alt="VibeBar demo" width="600">
@@ -17,6 +17,7 @@ Hover to expand — see which projects are running, what was last asked, and how
 - **CC / CX badges** — cards labeled CC (Claude Code, orange) or CX (Codex CLI, blue) so you always know which tool owns a session
 - **Jump to window** — double-click a card to bring VS Code into focus
 - **Drag to reorder** — arrange sessions by priority
+- **Slide to reposition** — drag the bar left or right to move it anywhere on screen; drag to either edge and it springs back to center, position persists across restarts
 - **Zero taskbar footprint** — uses `SetWindowRgn` so transparent areas pass clicks through
 - **Virtual desktop aware** — follows you across Windows virtual desktops
 

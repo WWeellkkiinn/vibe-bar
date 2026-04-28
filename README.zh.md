@@ -4,7 +4,7 @@
 
 Windows 悬浮条，Dynamic Island 风格，实时展示所有 Claude Code 和 Codex CLI 会话状态。
 
-悬停展开 — 查看哪些项目在运行、最近问了什么、距今多久。双击卡片跳转到对应 VS Code 窗口，拖拽排序。
+悬停展开 — 查看哪些项目在运行、最近问了什么、距今多久。双击卡片跳转到对应 VS Code 窗口，拖拽排序。左右滑动随意移动悬浮条位置，拖到屏幕边缘自动弹回中央。
 
 <div align="center">
   <img src="VibeBar.gif" alt="VibeBar 演示" width="600">
@@ -17,6 +17,7 @@ Windows 悬浮条，Dynamic Island 风格，实时展示所有 Claude Code 和 C
 - **CC / CX 标识** — 卡片标注 CC（Claude Code，橙色）或 CX（Codex CLI，蓝色），一眼区分来源
 - **跳转窗口** — 双击卡片将对应 VS Code 窗口置于前台
 - **拖拽排序** — 按优先级排列会话
+- **左右滑动定位** — 拖动悬浮条自由移动位置，滑到屏幕边缘自动弹回中央，位置跨重启保留
 - **零任务栏占用** — 通过 `SetWindowRgn` 使透明区域鼠标穿透
 - **虚拟桌面感知** — 跟随 Windows 虚拟桌面切换
 
@@ -55,25 +56,25 @@ cscript.exe vibebar.vbs
 3. 写入 `.python-path`（gitignored），供 `vibebar.vbs` 读取
 4. 向 `%USERPROFILE%\.claude\settings.json` 注入以下 Claude Code hook 事件：
 
-| 事件 | 用途 |
-|---|---|
-| `SessionStart` | 注册会话，判断主会话 vs 子代理 |
-| `UserPromptSubmit` | 标记运行中，记录提示词 |
-| `Stop` / `StopFailure` | 标记空闲 |
-| `PreToolUse` | 检测 Bash 工具活动（蓝点） |
-| `PostToolUse` / `PostToolUseFailure` | 清除 Bash 活动标记 |
-| `PermissionRequest` / `Notification` | 红点，需要关注 |
-| `PermissionDenied` | 清除关注标记 |
-| `SubagentStart` / `SubagentStop` | 追踪后台代理数量（蓝点）；若 `agent_type` 含 `codex`，按 `cwd` 写入一条 pending 记录（10 秒内有效），下一个相同 cwd 的 Codex `SessionStart` 消费后自动标为隐藏 |
+| 事件                                     | 用途                                                                                                                                                                   |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SessionStart`                         | 注册会话，判断主会话 vs 子代理                                                                                                                                         |
+| `UserPromptSubmit`                     | 标记运行中，记录提示词                                                                                                                                                 |
+| `Stop` / `StopFailure`               | 标记空闲                                                                                                                                                               |
+| `PreToolUse`                           | 检测 Bash 工具活动（蓝点）                                                                                                                                             |
+| `PostToolUse` / `PostToolUseFailure` | 清除 Bash 活动标记                                                                                                                                                     |
+| `PermissionRequest` / `Notification` | 红点，需要关注                                                                                                                                                         |
+| `PermissionDenied`                     | 清除关注标记                                                                                                                                                           |
+| `SubagentStart` / `SubagentStop`     | 追踪后台代理数量（蓝点）；若 `agent_type` 含 `codex`，按 `cwd` 写入一条 pending 记录（10 秒内有效），下一个相同 cwd 的 Codex `SessionStart` 消费后自动标为隐藏 |
 
 5. 生成 `src/codex_hook.ps1` 并注入 `%USERPROFILE%\.codex\hooks.json`，同时在 `%USERPROFILE%\.codex\config.toml` 中启用 `codex_hooks = true`：
 
-| 事件 | 用途 |
-|---|---|
-| `SessionStart` | 注册 Codex 会话（CX 卡片）；若被 `SubagentStart` 预标记为 rescue agent 则自动隐藏 |
-| `UserPromptSubmit` | 标记运行中，记录提示词 |
-| `Stop` | 标记空闲，返回 `{"continue": true}` |
-| `PreToolUse` / `PostToolUse` / `PermissionRequest` | 同步 Claude Code 行为 |
+| 事件                                                     | 用途                                                                                |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `SessionStart`                                         | 注册 Codex 会话（CX 卡片）；若被 `SubagentStart` 预标记为 rescue agent 则自动隐藏 |
+| `UserPromptSubmit`                                     | 标记运行中，记录提示词                                                              |
+| `Stop`                                                 | 标记空闲，返回 `{"continue": true}`                                               |
+| `PreToolUse` / `PostToolUse` / `PermissionRequest` | 同步 Claude Code 行为                                                               |
 
 > `install.py` 幂等，重复运行安全，不会重复添加 hook 条目。
 
@@ -114,7 +115,7 @@ vibe-bar/
 
 ## 未来计划
 
-- [x] **Codex CLI 支持** — CC/CX 标识、独立卡片、共享 `state.json`
+- [X] **Codex CLI 支持** — CC/CX 标识、独立卡片、共享 `state.json`
 
 ## 许可证
 
