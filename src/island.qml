@@ -66,8 +66,8 @@ Window {
                 collapseShrinkTimer.restart()
             }
         }
-        onExpandedHChanged: {
-            if (expanded) bridge.onExpandStart(expandedH)
+        onHeightChanged: {
+            if (expanded) bridge.onExpandStart(height)
         }
 
         radius: Math.round(12 * sf)
@@ -134,9 +134,7 @@ Window {
         Item {
             id: expandedArea
             anchors { fill: parent; margins: island.bodyPadding }
-            clip: true
             opacity: island.expanded ? 1.0 : 0.0
-            Behavior on opacity { NumberAnimation { duration: 150 } }
 
             Text {
                 visible: sessionsModel.sessionCount === 0
@@ -148,13 +146,9 @@ Window {
 
             ListView {
                 id: cardsList
-                anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                height: island.visibleRows * island.slotH
-                Behavior on height {
-                    NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
-                }
+                anchors.fill: parent
                 spacing: 0
-                clip: false
+                clip: true
                 model: sessionsModel
 
                 property real dragComp: 0
