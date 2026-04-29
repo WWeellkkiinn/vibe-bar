@@ -143,7 +143,21 @@ class VibeBarApp:
             and not str(s.get("last_prompt") or "").lstrip().startswith(("--wait", "<task>"))
         }
 
-        sessions = candidates
+        running_codex_cwds = {
+            s["cwd"] for sid, s in all_sessions.items()
+            if s.get("source") == "codex" and s.get("status") == STATUS_RUNNING and s.get("cwd")
+        }
+
+        sessions = {}
+        for sid, s in candidates.items():
+            if (s.get("source") != "codex"
+                    and s.get("status") == STATUS_IDLE
+                    and s.get("active_subagent_count", 0) == 0
+                    and not s.get("active_bash")
+                    and s.get("cwd") and s.get("cwd") in running_codex_cwds):
+                s = dict(s)
+                s["active_subagent_count"] = 1
+            sessions[sid] = s
 
         cur_order = self.model.get_order()
         order = [sid for sid in cur_order if sid in sessions]
