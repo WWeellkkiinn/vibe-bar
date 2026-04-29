@@ -185,15 +185,17 @@ def main() -> int:
                 matched = max(cwd_matches, key=lambda p: p.get("ts", ""), default=None)
                 if matched:
                     sess["is_rescue_agent"] = True
+                    sess["is_primary"] = False
                     if matched.get("parent_sid"):
                         sess["parent_sid"] = matched["parent_sid"]
                     state["_pending_rescues"] = [p for p in pending if p is not matched]
-                has_active_cx = any(
-                    s.get("source") == "codex" and s.get("cwd") == cwd
-                    and s.get("is_primary") and not s.get("user_closed") and k != sid
-                    for k, s in sessions.items()
-                )
-                sess["is_primary"] = not has_active_cx
+                else:
+                    has_active_cx = any(
+                        s.get("source") == "codex" and s.get("cwd") == cwd
+                        and s.get("is_primary") and not s.get("user_closed") and k != sid
+                        for k, s in sessions.items()
+                    )
+                    sess["is_primary"] = not has_active_cx
             elif payload.get("model") or source == "resume":
                 sess["is_primary"] = True
             else:
