@@ -193,12 +193,42 @@ Window {
                 return (island.height - island.collapsedH) / (fadeStartH - island.collapsedH)
             }
 
-            Text {
+            Rectangle {
                 visible: sessionsModel.sessionCount === 0
                 anchors.centerIn: parent
-                text: "Waiting for Claude Code sessions…"
-                color: "#5e6678"
-                font { family: "Microsoft YaHei UI"; pixelSize: Math.round(12 * island.sf) }
+                width: parent.width
+                height: island.cardH
+                radius: Math.round(16 * island.sf)
+                color: "#1a1d25"
+
+                DragHandler {
+                    id: emptyStateDragH
+                    target: null
+                    acceptedButtons: Qt.LeftButton
+                    dragThreshold: Math.round(8 * island.sf)
+                    xAxis.enabled: true
+                    yAxis.enabled: false
+                    onActiveChanged: {
+                        if (active) {
+                            expandTimer.stop()
+                            bridge.startIslandDrag()
+                        } else {
+                            bridge.endIslandDrag()
+                            if (hoverHandler.hovered) expandTimer.restart()
+                            else leaveTimer.restart()
+                        }
+                    }
+                    onActiveTranslationChanged: {
+                        if (active) bridge.moveIslandX()
+                    }
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "Waiting for Claude Code sessions…"
+                    color: "#5e6678"
+                    font { family: "Microsoft YaHei UI"; pixelSize: Math.round(12 * island.sf) }
+                }
             }
 
             ListView {
