@@ -185,8 +185,9 @@ Window {
             anchors { fill: parent; margins: island.bodyPadding }
             enabled: island.expanded
             opacity: {
-                if (island.expanded) return 1.0
-                var fadeStartH = island.collapsedH + (island.expandedH - island.collapsedH) * 0.5
+                var range = island.expandedH - island.collapsedH
+                if (range <= 0) return island.expanded ? 1.0 : 0.0
+                var fadeStartH = island.collapsedH + range * 0.5
                 if (island.height >= fadeStartH) return 1.0
                 if (island.height <= island.collapsedH) return 0.0
                 return (island.height - island.collapsedH) / (fadeStartH - island.collapsedH)
