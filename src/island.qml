@@ -105,7 +105,7 @@ Window {
                 else          { expandTimer.stop(); if (!islandDragH.active && !cardsList.cardHorzDragging && !emptyStateDragH.active) leaveTimer.restart() }
             }
         }
-        Timer { id: leaveTimer;  interval: 400; onTriggered: island.expanded = false }
+        Timer { id: leaveTimer;  interval: 250; onTriggered: island.expanded = false }
         Timer { id: expandTimer; interval: 150; onTriggered: island.expanded = true  }
 
         DragHandler {
@@ -347,7 +347,7 @@ Window {
                             anchors.fill: parent
                             radius: parent.radius
                             color: "#ffffff"
-                            opacity: (cardHover.hovered || dragH.active) ? 0.12 : 0.0
+                            opacity: (island.height >= island.expandedH && (cardHover.hovered || dragH.active)) ? 0.12 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 100 } }
                         }
 
