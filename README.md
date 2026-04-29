@@ -134,6 +134,11 @@ cscript.exe vibebar.vbs
 
 - [x] **Codex CLI support** — CC/CX badges, separate cards per tool, shared `state.json`
 - [x] **Free positioning** — drag the bar left or right, snap back to center at screen edges, position persists across restarts
+- [x] **Card order memory** — drag to reorder cards; order persists across restarts (keyed by cwd)
+- [x] **Smooth collapse animation** — card content fades out in the second half of collapse and fades in on expand; bottom corners stay rounded throughout via MultiEffect layer clipping
+- [x] **Blue dot while Codex runs** — parent CC session stays blue until the spawned Codex process actually fires Stop, using parent_sid tracking instead of cwd heuristic
+- [x] **Stale session cleanup** — primary sessions inactive for 4 h are automatically marked idle; zombie sessions no longer cause permanent blue dots
+- [x] **Empty state card** — a proper card-shaped placeholder with drag support when no sessions are present
 
 ## Star History
 

@@ -117,6 +117,11 @@ vibe-bar/
 
 - [X] **Codex CLI 支持** — CC/CX 标识、独立卡片、共享 `state.json`
 - [X] **自由定位** — 左右拖动悬浮条，触碰屏幕边缘弹回中央，位置跨重启保留
+- [X] **卡片顺序记忆** — 拖拽排序后重启保持，以 cwd 为键持久化
+- [X] **流畅收起动画** — 卡片内容在收起后半段淡出、展开时淡入；MultiEffect layer 裁切确保全程底部圆角
+- [X] **Codex 后台蓝点** — 用 parent_sid 追踪替代 cwd 启发式，CC 卡片在 Codex 进程真正停止前保持蓝色
+- [X] **僵尸 session 清理** — 4 小时无 hook 的 primary session 自动标为 idle，不再造成永久蓝点
+- [X] **空状态卡片** — 无 session 时显示卡片样式占位符，支持拖动
 
 ## 许可证
 
