@@ -60,6 +60,8 @@ class VibeBarApp:
         self._own_hwnd = 0
         self._reposition_needed = False
         self._flash_timers: dict[str, QTimer] = {}
+        self._saved_cwd_order: list = load_ui_config().get("card_order") or []
+        self._last_cwd_order: list = []
 
         self._engine = QQmlApplicationEngine()
         ctx = self._engine.rootContext()
@@ -166,9 +168,7 @@ class VibeBarApp:
             if sid not in sid_order:
                 sid_order.append(sid)
 
-        saved_cwds = load_ui_config().get("card_order")
-        if not isinstance(saved_cwds, list):
-            saved_cwds = []
+        saved_cwds = self._saved_cwd_order
 
         grouped: dict = {}
         no_cwd: list = []
@@ -192,7 +192,11 @@ class VibeBarApp:
 
         if not self.bridge._is_dragging:
             self.model.update_sessions(sessions, order)
-            _save_card_order(self.model.get_cwd_order())
+            new_cwd_order = self.model.get_cwd_order()
+            if new_cwd_order != self._last_cwd_order:
+                _save_card_order(new_cwd_order)
+                self._saved_cwd_order = new_cwd_order
+                self._last_cwd_order = new_cwd_order
 
         for sid, sess in sessions.items():
             finished_at = sess.get("finished_at") or ""

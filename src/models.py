@@ -367,7 +367,6 @@ class IslandBridge(QObject):
     @pyqtSlot(int, int)
     def moveSessionByIndex(self, from_idx: int, to_idx: int) -> None:
         self._model.reorder(from_idx, to_idx)
-        _save_card_order(self._model.get_cwd_order())
 
     @pyqtSlot()
     def quit(self) -> None:
