@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import QtQuick.Effects
 
 Window {
     id: root
@@ -80,6 +81,23 @@ Window {
         color: island.expanded ? "transparent" : "#15171d"
         Behavior on color { ColorAnimation { duration: 200 } }
 
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 0.0
+            maskSource: ShaderEffectSource {
+                width: island.width
+                height: island.height
+                sourceItem: Rectangle {
+                    width: island.width
+                    height: island.height
+                    radius: island.radius
+                    color: "black"
+                }
+            }
+        }
+
         HoverHandler {
             id: hoverHandler
             onHoveredChanged: {
@@ -116,6 +134,7 @@ Window {
         // ── Collapsed: dot strip ──────────────────────────────────────────────
         Item {
             id: dotStrip
+            z: 2
             anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
             height: island.collapsedH
             width: Math.max(Math.round(10 * island.sf), dotRow.implicitWidth)

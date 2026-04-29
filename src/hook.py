@@ -57,7 +57,7 @@ def cleanup_stale_sessions(state: dict) -> None:
             age = (now - datetime.fromisoformat(sess["last_update"])).total_seconds()
         except Exception:
             age = STALE_IDLE_PURGE_SEC + 1
-        stale_thresh = STALE_PRIMARY_RUNNING_SEC if sess.get("is_primary") else STALE_RUNNING_THRESHOLD_SEC
+        stale_thresh = STALE_RUNNING_THRESHOLD_SEC if sess.get("is_primary") is False else STALE_PRIMARY_RUNNING_SEC
         if sess.get("status") == "running" and age > stale_thresh:
             sess["status"] = "idle"
             sess.pop("needs_attention", None)
@@ -181,10 +181,8 @@ def main() -> int:
             if source_name == "codex":
                 # Check if Claude pre-announced a rescue spawn for this cwd via SubagentStart
                 pending = state.get("_pending_rescues", [])
-                matched = next(
-                    (p for p in pending if p.get("cwd") == cwd),
-                    None,
-                )
+                cwd_matches = [p for p in pending if p.get("cwd") == cwd]
+                matched = max(cwd_matches, key=lambda p: p.get("ts", ""), default=None)
                 if matched:
                     sess["is_rescue_agent"] = True
                     if matched.get("parent_sid"):
