@@ -51,6 +51,17 @@ def load_ui_config() -> dict:
     try: return json.loads(UI_CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception: return {}
 
+def _save_card_order(card_order: list) -> None:
+    try:
+        UI_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        cfg = load_ui_config()
+        cfg["card_order"] = card_order
+        tmp = UI_CONFIG_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cfg), encoding="utf-8")
+        tmp.replace(UI_CONFIG_PATH)
+    except Exception:
+        pass
+
 def _save_island_x(x: int) -> None:
     try:
         UI_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -221,6 +232,17 @@ class SessionsModel(QAbstractListModel):
     def get_order(self) -> list:
         return list(self._order)
 
+    def get_cwd_order(self) -> list:
+        seen: set = set()
+        order: list = []
+        for sid in self._order:
+            cwd = str(self._rows.get(sid, {}).get("cwd") or "")
+            if not cwd or cwd in seen:
+                continue
+            seen.add(cwd)
+            order.append(cwd)
+        return order
+
     def reorder(self, from_idx: int, to_idx: int) -> None:
         if from_idx == to_idx or not (0 <= from_idx < len(self._order)) or not (0 <= to_idx < len(self._order)):
             return
@@ -345,6 +367,7 @@ class IslandBridge(QObject):
     @pyqtSlot(int, int)
     def moveSessionByIndex(self, from_idx: int, to_idx: int) -> None:
         self._model.reorder(from_idx, to_idx)
+        _save_card_order(self._model.get_cwd_order())
 
     @pyqtSlot()
     def quit(self) -> None:

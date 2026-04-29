@@ -13,7 +13,7 @@ from models import (
     read_state, _save_state, _acquire_lock, _release_lock, _age_sec,
     STATUS_RUNNING, STATUS_IDLE,
     FOUR_HOURS_SEC, IDLE_PURGE_SEC, STALE_RUNNING_SEC,
-    load_ui_config,
+    load_ui_config, _save_card_order,
 )
 from win32 import (
     ensure_on_current_desktop, get_primary_work_area,
@@ -161,13 +161,38 @@ class VibeBarApp:
             sessions[sid] = s
 
         cur_order = self.model.get_order()
-        order = [sid for sid in cur_order if sid in sessions]
+        sid_order = [sid for sid in cur_order if sid in sessions]
         for sid in sessions:
-            if sid not in order:
-                order.append(sid)
+            if sid not in sid_order:
+                sid_order.append(sid)
+
+        saved_cwds = load_ui_config().get("card_order")
+        if not isinstance(saved_cwds, list):
+            saved_cwds = []
+
+        grouped: dict = {}
+        no_cwd: list = []
+        for sid in sid_order:
+            cwd = str(sessions[sid].get("cwd") or "")
+            if cwd:
+                grouped.setdefault(cwd, []).append(sid)
+            else:
+                no_cwd.append(sid)
+
+        order: list = []
+        seen_saved: set = set()
+        for cwd in saved_cwds:
+            if not isinstance(cwd, str) or cwd in seen_saved:
+                continue
+            seen_saved.add(cwd)
+            order.extend(grouped.pop(cwd, []))
+        for sids in grouped.values():
+            order.extend(sids)
+        order.extend(no_cwd)
 
         if not self.bridge._is_dragging:
             self.model.update_sessions(sessions, order)
+            _save_card_order(self.model.get_cwd_order())
 
         for sid, sess in sessions.items():
             finished_at = sess.get("finished_at") or ""

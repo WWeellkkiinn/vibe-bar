@@ -102,7 +102,7 @@ Window {
             id: hoverHandler
             onHoveredChanged: {
                 if (hovered) { leaveTimer.stop(); expandTimer.restart() }
-                else          { expandTimer.stop(); if (!islandDragH.active && !cardsList.cardHorzDragging) leaveTimer.restart() }
+                else          { expandTimer.stop(); if (!islandDragH.active && !cardsList.cardHorzDragging && !emptyStateDragH.active) leaveTimer.restart() }
             }
         }
         Timer { id: leaveTimer;  interval: 400; onTriggered: island.expanded = false }
@@ -209,6 +209,7 @@ Window {
                     xAxis.enabled: true
                     yAxis.enabled: false
                     onActiveChanged: {
+                        bridge.setDragging(active)
                         if (active) {
                             expandTimer.stop()
                             bridge.startIslandDrag()
