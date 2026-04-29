@@ -18,6 +18,7 @@ DEBUG_LOG = STATE_PATH.parent / "hook-debug.log"
 LOCK_ACQUIRE_TIMEOUT_SEC = 0.3
 LOCK_STALE_AGE_SEC = 5.0
 STALE_RUNNING_THRESHOLD_SEC = 600   # 10 min — non-primary sessions that stop sending hooks
+STALE_PRIMARY_RUNNING_SEC   = 4 * 3600  # 4 h — primary sessions with no hook activity
 STALE_IDLE_PURGE_SEC = 86400        # 24 h — remove very old idle sessions
 RESCUE_PENDING_TTL = 60             # seconds — SubagentStart → Codex SessionStart window
 
@@ -56,7 +57,8 @@ def cleanup_stale_sessions(state: dict) -> None:
             age = (now - datetime.fromisoformat(sess["last_update"])).total_seconds()
         except Exception:
             age = STALE_IDLE_PURGE_SEC + 1
-        if sess.get("status") == "running" and age > STALE_RUNNING_THRESHOLD_SEC and not sess.get("is_primary"):
+        stale_thresh = STALE_PRIMARY_RUNNING_SEC if sess.get("is_primary") else STALE_RUNNING_THRESHOLD_SEC
+        if sess.get("status") == "running" and age > stale_thresh:
             sess["status"] = "idle"
             sess.pop("needs_attention", None)
             if not sess.get("finished_at"):
@@ -185,6 +187,8 @@ def main() -> int:
                 )
                 if matched:
                     sess["is_rescue_agent"] = True
+                    if matched.get("parent_sid"):
+                        sess["parent_sid"] = matched["parent_sid"]
                     state["_pending_rescues"] = [p for p in pending if p is not matched]
                 has_active_cx = any(
                     s.get("source") == "codex" and s.get("cwd") == cwd
@@ -239,7 +243,7 @@ def main() -> int:
             agent_type = str(payload.get("agent_type", ""))
             if "codex" in agent_type.lower() and cwd:
                 pending = state.setdefault("_pending_rescues", [])
-                pending.append({"ts": _now_iso(), "cwd": cwd})
+                pending.append({"ts": _now_iso(), "cwd": cwd, "parent_sid": sid})
         elif event == "SubagentStop" and source_name != "codex":
             sess["active_subagent_count"] = max(0, sess.get("active_subagent_count", 0) - 1)
         elif event == "PreToolUse" and payload.get("tool_name") == "Bash":

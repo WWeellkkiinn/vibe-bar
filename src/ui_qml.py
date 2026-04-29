@@ -143,9 +143,10 @@ class VibeBarApp:
             and not str(s.get("last_prompt") or "").lstrip().startswith(("--wait", "<task>"))
         }
 
-        running_codex_cwds = {
-            s["cwd"] for sid, s in all_sessions.items()
-            if s.get("source") == "codex" and s.get("status") == STATUS_RUNNING and s.get("cwd")
+        running_codex_parent_sids = {
+            s["parent_sid"] for sid, s in all_sessions.items()
+            if s.get("source") == "codex" and s.get("status") == STATUS_RUNNING
+            and s.get("parent_sid")
         }
 
         sessions = {}
@@ -154,7 +155,7 @@ class VibeBarApp:
                     and s.get("status") == STATUS_IDLE
                     and s.get("active_subagent_count", 0) == 0
                     and not s.get("active_bash")
-                    and s.get("cwd") and s.get("cwd") in running_codex_cwds):
+                    and sid in running_codex_parent_sids):
                 s = dict(s)
                 s["active_subagent_count"] = 1
             sessions[sid] = s
@@ -276,7 +277,11 @@ class VibeBarApp:
             to_del = []
             for sid, s in sessions.items():
                 age = _age_sec(s, now)
-                if s.get("status") == "running" and age > STALE_RUNNING_SEC and not s.get("is_primary"):
+                if s.get("status") == "running" and age > FOUR_HOURS_SEC and s.get("is_primary"):
+                    s["status"] = "idle"
+                    s.setdefault("finished_at", s.get("last_update"))
+                    changed = True
+                elif s.get("status") == "running" and age > STALE_RUNNING_SEC and not s.get("is_primary"):
                     s["status"] = "idle"
                     s.setdefault("finished_at", s.get("last_update"))
                     changed = True
