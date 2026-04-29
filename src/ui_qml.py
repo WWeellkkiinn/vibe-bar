@@ -61,7 +61,7 @@ class VibeBarApp:
         self._reposition_needed = False
         self._flash_timers: dict[str, QTimer] = {}
         self._saved_cwd_order: list = load_ui_config().get("card_order") or []
-        self._last_cwd_order: list = []
+        self._last_cwd_order: list = list(self._saved_cwd_order)
         self._initial_order_restored: bool = False
 
         self._engine = QQmlApplicationEngine()
@@ -138,19 +138,16 @@ class VibeBarApp:
         all_sessions = state.get("sessions", {}) or {}
         now_dt = datetime.now()
 
-        candidates = {
-            sid: s for sid, s in all_sessions.items()
-            if s.get("is_primary") and not s.get("user_closed")
-            and (s.get("status") == STATUS_RUNNING or _age_sec(s, now_dt) <= FOUR_HOURS_SEC)
-            and not s.get("is_rescue_agent")
-            and not str(s.get("last_prompt") or "").lstrip().startswith(("--wait", "<task>"))
-        }
-
-        running_codex_parent_sids = {
-            s["parent_sid"] for sid, s in all_sessions.items()
-            if s.get("source") == "codex" and s.get("status") == STATUS_RUNNING
-            and s.get("parent_sid")
-        }
+        candidates: dict = {}
+        running_codex_parent_sids: set = set()
+        for sid, s in all_sessions.items():
+            if s.get("source") == "codex" and s.get("status") == STATUS_RUNNING and s.get("parent_sid"):
+                running_codex_parent_sids.add(s["parent_sid"])
+            if (s.get("is_primary") and not s.get("user_closed")
+                    and (s.get("status") == STATUS_RUNNING or _age_sec(s, now_dt) <= FOUR_HOURS_SEC)
+                    and not s.get("is_rescue_agent")
+                    and not str(s.get("last_prompt") or "").lstrip().startswith(("--wait", "<task>"))):
+                candidates[sid] = s
 
         sessions = {}
         for sid, s in candidates.items():
@@ -164,10 +161,12 @@ class VibeBarApp:
             sessions[sid] = s
 
         cur_order = self.model.get_order()
-        sid_order = [sid for sid in cur_order if sid in sessions]
+        sid_order_set: set = set(cur_order) & set(sessions)
+        sid_order = [sid for sid in cur_order if sid in sid_order_set]
         for sid in sessions:
-            if sid not in sid_order:
+            if sid not in sid_order_set:
                 sid_order.append(sid)
+                sid_order_set.add(sid)
 
         saved_cwds = self._saved_cwd_order if not self._initial_order_restored else self.model.get_cwd_order()
 

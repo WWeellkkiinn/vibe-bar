@@ -51,27 +51,22 @@ def load_ui_config() -> dict:
     try: return json.loads(UI_CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception: return {}
 
-def _save_card_order(card_order: list) -> None:
+def _save_ui_config(updates: dict) -> None:
     try:
         UI_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         cfg = load_ui_config()
-        cfg["card_order"] = card_order
+        cfg.update(updates)
         tmp = UI_CONFIG_PATH.with_suffix(".tmp")
         tmp.write_text(json.dumps(cfg), encoding="utf-8")
         tmp.replace(UI_CONFIG_PATH)
     except Exception:
         pass
 
+def _save_card_order(card_order: list) -> None:
+    _save_ui_config({"card_order": card_order})
+
 def _save_island_x(x: int) -> None:
-    try:
-        UI_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        cfg = load_ui_config()
-        cfg["island_x"] = x
-        tmp = UI_CONFIG_PATH.with_suffix(".tmp")
-        tmp.write_text(json.dumps(cfg), encoding="utf-8")
-        tmp.replace(UI_CONFIG_PATH)
-    except Exception:
-        pass
+    _save_ui_config({"island_x": x})
 
 def read_state() -> dict:
     try: return json.loads(STATE_PATH.read_text(encoding="utf-8"))
