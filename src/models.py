@@ -122,6 +122,7 @@ class SessionsModel(QAbstractListModel):
     IsAttentionRole = Qt.ItemDataRole.UserRole + 10
     IsBackgroundRole = Qt.ItemDataRole.UserRole + 11
     SourceRole       = Qt.ItemDataRole.UserRole + 12
+    PendingPermissionRole = Qt.ItemDataRole.UserRole + 13
 
     countChanged = pyqtSignal()
 
@@ -152,6 +153,7 @@ class SessionsModel(QAbstractListModel):
             self.IsAttentionRole: b"isAttention",
             self.IsBackgroundRole: b"isBackground",
             self.SourceRole:       b"source",
+            self.PendingPermissionRole: b"pendingPermission",
         }
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
@@ -171,11 +173,80 @@ class SessionsModel(QAbstractListModel):
         if role == self.IsAttentionRole:  return bool(s.get("needs_attention"))
         if role == self.IsBackgroundRole: return _is_background(s)
         if role == self.SourceRole:       return s.get("source", "claude")
+        if role == self.PendingPermissionRole: return s.get("pending_permission")
         return None
 
+    # Map field name → list of role ints affected when that field changes.
+    _FIELD_ROLE_MAP: dict = {}
+
+    @classmethod
+    def _build_field_role_map(cls) -> dict:
+        if cls._FIELD_ROLE_MAP:
+            return cls._FIELD_ROLE_MAP
+        m = {
+            "cwd_name":              [cls.CwdNameRole],
+            "cwd":                   [cls.CwdNameRole],
+            "last_prompt":           [cls.PromptRole, cls.DotColorRole],
+            "status":                [cls.StatusRole, cls.IsRunningRole, cls.DotColorRole, cls.ElapsedRole],
+            "model":                 [cls.ModelNameRole],
+            "finished_at":           [cls.ElapsedRole],
+            "prompt_at":             [cls.ElapsedRole],
+            "needs_attention":       [cls.IsAttentionRole, cls.DotColorRole],
+            "active_subagent_count": [cls.IsBackgroundRole, cls.DotColorRole],
+            "active_bash":           [cls.IsBackgroundRole, cls.DotColorRole],
+            "source":                [cls.SourceRole],
+            "pending_permission":    [cls.PendingPermissionRole],
+        }
+        cls._FIELD_ROLE_MAP = m
+        return m
+
+    @staticmethod
+    def _pending_signature(p):
+        # Build a hashable signature from a pending_permission list so that
+        # different list object identities with identical content compare equal.
+        if not p:
+            return None
+        if not isinstance(p, list):
+            return p
+        out = []
+        for item in p:
+            if not isinstance(item, dict):
+                out.append(item); continue
+            ms = item.get("multi_select")
+            sg = item.get("suggestions")
+            out.append((
+                item.get("id"),
+                item.get("kind"),
+                item.get("tool_name"),
+                tuple(ms) if isinstance(ms, list) else ms,
+                tuple(sg) if isinstance(sg, list) else sg,
+                item.get("expires_at"),
+            ))
+        return tuple(out)
+
+    @classmethod
+    def _diff_session(cls, old_row: dict, new_row: dict) -> list:
+        if old_row is new_row:
+            return []
+        fmap = cls._build_field_role_map()
+        changed_roles: set = set()
+        keys = set(old_row.keys()) | set(new_row.keys()) if old_row or new_row else set()
+        for k in keys:
+            ov = old_row.get(k) if old_row else None
+            nv = new_row.get(k) if new_row else None
+            if k == "pending_permission":
+                if cls._pending_signature(ov) == cls._pending_signature(nv):
+                    continue
+            else:
+                if ov == nv:
+                    continue
+            roles = fmap.get(k)
+            if roles:
+                changed_roles.update(roles)
+            # Unmapped fields: ignored — they don't surface to any QML role.
+        return list(changed_roles)
+
     def update_sessions(self, sessions: dict, order: list[str]) -> None:
-        if order == self._order and sessions == self._rows:
-            return
         root = QModelIndex()
         old_count = len(self._order)
 
@@ -197,12 +268,16 @@ class SessionsModel(QAbstractListModel):
             self._rows  = dict(sessions)
             self.endResetModel()
         else:
-            # Same set and order: emit dataChanged per item (no flicker)
+            # Same set and order: per-row field-level diff with targeted roles.
             for i, sid in enumerate(self._order):
-                if sessions.get(sid) != self._rows.get(sid):
-                    self._rows[sid] = sessions[sid]
-                    idx = self.index(i)
-                    self.dataChanged.emit(idx, idx)
+                new_row = sessions.get(sid) or {}
+                old_row = self._rows.get(sid) or {}
+                changed_roles = self._diff_session(old_row, new_row)
+                if not changed_roles:
+                    continue
+                self._rows[sid] = new_row
+                idx = self.index(i)
+                self.dataChanged.emit(idx, idx, changed_roles)
 
         if len(self._order) != old_count:
             self.countChanged.emit()
@@ -250,6 +325,7 @@ class SessionsModel(QAbstractListModel):
 
 class IslandBridge(QObject):
     collapseRequested = pyqtSignal()
+    pendingCountChanged = pyqtSignal(int)
 
     def __init__(self, model: SessionsModel, cmd_queue: queue.Queue, parent=None):
         super().__init__(parent)
@@ -266,6 +342,36 @@ class IslandBridge(QObject):
         self._last_drag_x: int = 0
         self._drag_ag_left: int = 0
         self._drag_ag_right: int = 1920
+        self._permission_server = None
+        self._pending_count: int = 0
+
+    def set_permission_server(self, server) -> None:
+        self._permission_server = server
+
+    @pyqtProperty(int, notify=pendingCountChanged)
+    def pendingCount(self) -> int:
+        return self._pending_count
+
+    def set_pending_count(self, n: int) -> None:
+        if n != self._pending_count:
+            self._pending_count = n
+            self.pendingCountChanged.emit(n)
+
+    @pyqtSlot(str, str)
+    def respondPermission(self, request_id: str, decision_json: str) -> None:
+        if self._permission_server is None:
+            return
+        try:
+            decision = json.loads(decision_json) if decision_json else {}
+        except Exception:
+            decision = {}
+        self._permission_server.resolve(request_id, decision)
+
+    @pyqtSlot(str, str)
+    def dismissNotification(self, request_id: str, _unused: str = "") -> None:
+        if self._permission_server is None:
+            return
+        self._permission_server.resolve(request_id, {})
 
     def _update_mask(self, h: int) -> None:
         if self._own_hwnd and self._window_h_logical and self._island_w_logical:

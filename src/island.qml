@@ -30,7 +30,13 @@ Window {
         }
         property int  displayCount: 0
         property int  visibleRows: Math.max(1, Math.min(displayCount, 10))
-        property int  expandedH: bodyPadding * 2 + visibleRows * slotH
+        // 基础高度按 visibleRows 算；若有 pending 卡片展开则按 ListView 实际 contentHeight 取大值，
+        // 上限 = 10 张普通卡 + ~400dp pending 余量，避免单次审批面板撑爆屏幕。
+        property int  baseExpandedH: bodyPadding * 2 + visibleRows * slotH
+        property int  maxExpandedH: bodyPadding * 2 + slotH * 10 + Math.round(400 * sf)
+        property int  expandedH: Math.min(maxExpandedH,
+                                          Math.max(baseExpandedH,
+                                                   bodyPadding * 2 + Math.ceil(cardsList.contentHeight)))
 
         Component.onCompleted: displayCount = sessionsModel.sessionCount
 
@@ -55,6 +61,14 @@ Window {
         }
 
         property real _maskH: 0   // last height committed to Win32 mask
+        property int  pendingInputFocusCount: 0  // pending 输入框激活时 +1，全失焦才允许 leaveTimer 收起
+        property var  _inputCache: ({})  // reqId -> 已输入文本，跨 Repeater 重建保留
+        // 回车后焦点归零时，如果鼠标已离开岛，主动启动 leaveTimer
+        onPendingInputFocusCountChanged: {
+            if (pendingInputFocusCount === 0 && !hoverHandler.hovered && expanded) {
+                leaveTimer.restart()
+            }
+        }
 
         height: expanded ? expandedH : collapsedH
         Behavior on height {
@@ -120,7 +134,8 @@ Window {
                 else          { expandTimer.stop(); if (!islandDragH.active && !cardsList.cardHorzDragging && !emptyStateDragH.active) leaveTimer.restart() }
             }
         }
-        Timer { id: leaveTimer;  interval: 250; onTriggered: island.expanded = false }
+        // 仅当输入框激活时不收起；其余情况（即使有 pending）正常收回
+        Timer { id: leaveTimer;  interval: 250; onTriggered: { if (island.pendingInputFocusCount === 0) island.expanded = false } }
         Timer { id: expandTimer; interval: 0;   onTriggered: island.expanded = true  }
 
         DragHandler {
@@ -273,11 +288,51 @@ Window {
                     required property string bgColor
                     required property string source
                     required property int    index
+                    required property var    pendingPermission
+
+                    readonly property bool _hasPending: pendingPermission !== null
+                                                     && pendingPermission !== undefined
+                                                     && pendingPermission.length > 0
+                    property int _pendingExtra: _hasPending && island.expanded
+                                                ? Math.round(10 * island.sf) + pendingCol.implicitHeight
+                                                : 0
+                    readonly property var _firstPending: _hasPending ? pendingPermission[0] : null
+                    readonly property string _questionText: {
+                        if (!_firstPending) return ""
+                        var b = _firstPending.tool_input_brief
+                        if (b && b.questions && b.questions.length > 0) {
+                            var q = b.questions[0]
+                            return String(q.question || q.header || "")
+                        }
+                        var s = _firstPending.suggestions
+                        if (s && s.length > 0 && s[0].question) return String(s[0].question)
+                        return ""
+                    }
 
                     property bool _closing: false
 
+                    // pendingPermission 变化时，清理 _inputCache 里已经 resolve 的条目
+                    onPendingPermissionChanged: {
+                        var cache = island._inputCache
+                        if (!cache) return
+                        var alive = {}
+                        if (_hasPending) {
+                            for (var i = 0; i < pendingPermission.length; i++) {
+                                var p = pendingPermission[i]
+                                if (p && p.id) alive[p.id] = true
+                            }
+                        }
+                        var changed = false
+                        var next = {}
+                        for (var k in cache) {
+                            if (alive[k]) next[k] = cache[k]
+                            else changed = true
+                        }
+                        if (changed) island._inputCache = next
+                    }
+
                     width: cardsList.width
-                    height: island.slotH
+                    height: island.slotH + _pendingExtra
                     clip: _closing   // clip only during collapse, not during drag
                     z: dragH.active ? 2 : 1
 
@@ -306,10 +361,12 @@ Window {
                     Rectangle {
                         id: cardVisual
                         width: parent.width
-                        height: island.cardH
+                        height: island.cardH + cardDelegate._pendingExtra
                         anchors.top: parent.top
                         radius: Math.round(16 * island.sf)
                         color: bgColor
+                        border.width: cardDelegate._hasPending ? Math.max(1, Math.round(2 * island.sf)) : 0
+                        border.color: "#ef4444"
                         transform: Translate { y: (dragH.active && dragH._mode === 2) ? (dragH.activeTranslation.y + cardsList.dragComp) : 0 }
 
                         DragHandler {
@@ -362,7 +419,10 @@ Window {
                             anchors.fill: parent
                             radius: parent.radius
                             color: "#ffffff"
-                            opacity: (island.height >= island.expandedH && (cardHover.hovered || dragH.active)) ? 0.12 : 0.0
+                            // pending 状态下禁用 hover 高亮，避免整张大卡变浅蓝
+                            opacity: (!cardDelegate._hasPending
+                                     && island.height >= island.expandedH
+                                     && (cardHover.hovered || dragH.active)) ? 0.12 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 100 } }
                         }
 
@@ -370,7 +430,11 @@ Window {
                             id: statusDot
                             width: Math.round(8 * island.sf); height: Math.round(8 * island.sf)
                             radius: Math.round(4 * island.sf)
-                            anchors { left: parent.left; leftMargin: Math.round(14 * island.sf); verticalCenter: parent.verticalCenter }
+                            // 锚到顶部 cardH 内垂直居中，避免 cardVisual 撑高时被带跑
+                            anchors {
+                                left: parent.left; leftMargin: Math.round(14 * island.sf)
+                                top: parent.top; topMargin: Math.round((island.cardH - 8 * island.sf) / 2)
+                            }
                             color: {
                                 var p = island.animPhase
                                 if (isAttention)
@@ -415,7 +479,7 @@ Window {
                             anchors {
                                 left: statusDot.right; leftMargin: Math.round(10 * island.sf)
                                 right: closeBtn.left; rightMargin: Math.round(6 * island.sf)
-                                bottom: parent.bottom; bottomMargin: Math.round(12 * island.sf)
+                                top: parent.top; topMargin: Math.round(island.cardH - 26 * island.sf)
                             }
                             text: lastPrompt
                             color: "#9aa3b5"
@@ -426,7 +490,10 @@ Window {
 
                         Item {
                             id: closeBtn
-                            anchors { right: parent.right; rightMargin: Math.round(8 * island.sf); verticalCenter: parent.verticalCenter }
+                            anchors {
+                                right: parent.right; rightMargin: Math.round(8 * island.sf)
+                                top: parent.top; topMargin: Math.round((island.cardH - 30 * island.sf) / 2)
+                            }
                             width: Math.round(30 * island.sf); height: Math.round(30 * island.sf)
 
                             HoverHandler { id: closeBtnHover }
@@ -461,6 +528,318 @@ Window {
                             gesturePolicy: TapHandler.ReleaseWithinBounds
                             onDoubleTapped: bridge.jump(sid)
                         }
+
+                        // ── Pending 区：cardVisual 内部，cardH 下方 ──
+                        Column {
+                            id: pendingCol
+                            visible: island.expanded && cardDelegate._hasPending
+                            anchors {
+                                left: parent.left; right: parent.right
+                                top: parent.top; topMargin: island.cardH
+                                leftMargin: Math.round(12 * island.sf)
+                                rightMargin: Math.round(12 * island.sf)
+                            }
+                        spacing: Math.round(6 * island.sf)
+
+                        Repeater {
+                            model: cardDelegate._hasPending ? cardDelegate.pendingPermission : []
+                            delegate: Column {
+                                id: itemCol
+                                required property var modelData
+                                readonly property string reqId: modelData.id
+                                readonly property bool _multiSelect: modelData.multi_select === true
+                                property string inputText: ""
+                                property var selectedValues: []
+                                property bool _inputIsFocused: false
+                                width: pendingCol.width
+                                spacing: Math.round(6 * island.sf)
+
+                                Component.onDestruction: {
+                                    if (_inputIsFocused) {
+                                        island.pendingInputFocusCount =
+                                            Math.max(0, island.pendingInputFocusCount - 1)
+                                    }
+                                }
+
+                                // elicitation 不显示 tool_name 行，留位置给问题文本
+                                Row {
+                                    visible: modelData.kind !== "elicitation"
+                                    spacing: Math.round(6 * island.sf)
+                                    Text {
+                                        text: modelData.tool_name && modelData.tool_name.length > 0 ? modelData.tool_name : "(tool)"
+                                        color: "#e8eaf0"
+                                        font { family: "Microsoft YaHei UI"; pixelSize: Math.round(11 * island.sf); bold: true }
+                                    }
+                                    Rectangle {
+                                        width: badgeText.implicitWidth + Math.round(8 * island.sf)
+                                        height: badgeText.implicitHeight + Math.round(2 * island.sf)
+                                        radius: Math.round(4 * island.sf)
+                                        color: "#2a2f3d"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        Text {
+                                            id: badgeText
+                                            anchors.centerIn: parent
+                                            text: modelData.kind === "permission" ? "PER" : "NOT"
+                                            color: "#9aa3b5"
+                                            font { pixelSize: Math.round(9 * island.sf); bold: true }
+                                        }
+                                    }
+                                }
+
+                                // 问题文本：elicitation 显示 question；其余显示工具参数预览
+                                Text {
+                                    width: parent.width
+                                    visible: text.length > 0
+                                    text: {
+                                        if (modelData.kind === "elicitation") return cardDelegate._questionText
+                                        var b = modelData.tool_input_brief
+                                        if (b && b.command) return String(b.command)
+                                        if (!b) return ""
+                                        var s = JSON.stringify(b)
+                                        return s.length > 160 ? s.substring(0, 160) + "…" : s
+                                    }
+                                    color: modelData.kind === "elicitation" ? "#f2f4f8" : "#cbd0db"
+                                    font {
+                                        family: modelData.kind === "elicitation" ? "Microsoft YaHei UI" : "Consolas"
+                                        pixelSize: Math.round((modelData.kind === "elicitation" ? 13 : 10) * island.sf)
+                                        bold: modelData.kind === "elicitation"
+                                    }
+                                    wrapMode: Text.Wrap
+                                    maximumLineCount: 4
+                                    elide: Text.ElideRight
+                                }
+
+                                // 选项 / Allow-Deny / Dismiss 按钮：垂直排列，宽度撑满
+                                Repeater {
+                                    model: {
+                                        var k = modelData.kind
+                                        var sugs = modelData.suggestions
+                                        var btns = []
+                                        if (k === "notification") {
+                                            btns.push({label:"知道了", desc:"", kind:"dismiss"})
+                                        } else if (k === "elicitation" && sugs && sugs.length > 0) {
+                                            for (var i = 0; i < sugs.length; i++) {
+                                                var s = sugs[i]
+                                                btns.push({label: s.label || s.value, desc: s.description || "",
+                                                           kind:"choice", value: s.value, question: s.question || ""})
+                                            }
+                                            if (itemCol._multiSelect) {
+                                                btns.push({label:"确认", desc:"", kind:"confirm"})
+                                            }
+                                            btns.push({label:"拒绝", desc:"", kind:"deny"})
+                                        } else {
+                                            btns.push({label:"允许", desc:"", kind:"allow"})
+                                            btns.push({label:"拒绝", desc:"", kind:"deny"})
+                                        }
+                                        return btns
+                                    }
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        property var btn: modelData
+                                        // 多选模式下当前选项是否被选中
+                                        readonly property bool _isChoice: btn.kind === "choice"
+                                        readonly property bool _isConfirm: btn.kind === "confirm"
+                                        readonly property bool _selected: itemCol._multiSelect && _isChoice
+                                                                          && itemCol.selectedValues.indexOf(btn.label) >= 0
+                                        // 配色：choice/dismiss/confirm = ghost 风格（透明 + 边框），allow/deny = 实色
+                                        readonly property bool _ghost: _isChoice || btn.kind === "dismiss" || _isConfirm
+                                        readonly property color _bgIdle: _selected ? "#2c3e6b"
+                                                                  : _ghost ? "transparent"
+                                                                  : btn.kind === "allow" ? "#1c5733"
+                                                                  : "#5b1f1f"
+                                        readonly property color _bgHover: _selected ? "#3a5290"
+                                                                  : _ghost ? "#2a2f3d"
+                                                                  : btn.kind === "allow" ? "#26804a"
+                                                                  : "#7a2828"
+                                        readonly property bool _confirmEnabled: !_isConfirm || itemCol.selectedValues.length > 0
+                                        width: itemCol.width
+                                        height: btnInner.implicitHeight + Math.round(12 * island.sf)
+                                        radius: Math.round(8 * island.sf)
+                                        opacity: _confirmEnabled ? 1.0 : 0.45
+                                        color: btnHover.hovered ? _bgHover : _bgIdle
+                                        border.width: (_ghost || _selected) ? Math.max(1, Math.round(1 * island.sf)) : 0
+                                        border.color: _selected ? "#7aa2ff"
+                                                      : btnHover.hovered ? "#7a8499" : "#3a3f50"
+                                        Behavior on color { ColorAnimation { duration: 100 } }
+                                        Behavior on border.color { ColorAnimation { duration: 100 } }
+                                        HoverHandler { id: btnHover }
+                                        Row {
+                                            id: btnInner
+                                            anchors {
+                                                left: parent.left; right: parent.right
+                                                verticalCenter: parent.verticalCenter
+                                                leftMargin: Math.round(12 * island.sf)
+                                                rightMargin: Math.round(12 * island.sf)
+                                            }
+                                            spacing: Math.round(6 * island.sf)
+                                            Text {
+                                                visible: _selected
+                                                text: "✓"
+                                                color: "#7aa2ff"
+                                                font { family: "Microsoft YaHei UI"; pixelSize: Math.round(12 * island.sf); bold: true }
+                                                anchors.verticalCenter: parent.verticalCenter
+                                            }
+                                            Column {
+                                                width: parent.width - (_selected ? (Math.round(12 * island.sf) + parent.spacing) : 0)
+                                                spacing: Math.round(2 * island.sf)
+                                                Text {
+                                                    width: parent.width
+                                                    text: _isConfirm
+                                                          ? ("确认 (" + itemCol.selectedValues.length + ")")
+                                                          : btn.label
+                                                    color: "#ffffff"
+                                                    font { family: "Microsoft YaHei UI"; pixelSize: Math.round(11 * island.sf); bold: true }
+                                                    elide: Text.ElideRight
+                                                }
+                                                Text {
+                                                    width: parent.width
+                                                    visible: btn.desc && btn.desc.length > 0
+                                                    text: btn.desc
+                                                    color: "#cfd3de"
+                                                    font { family: "Microsoft YaHei UI"; pixelSize: Math.round(10 * island.sf) }
+                                                    wrapMode: Text.Wrap
+                                                    maximumLineCount: 2
+                                                    elide: Text.ElideRight
+                                                }
+                                            }
+                                        }
+                                        TapHandler {
+                                            gesturePolicy: TapHandler.WithinBounds
+                                            enabled: _confirmEnabled
+                                            onTapped: {
+                                                var reqId = itemCol.reqId
+                                                var k = btn.kind
+                                                if (k === "dismiss") {
+                                                    bridge.dismissNotification(reqId, "")
+                                                } else if (k === "allow") {
+                                                    bridge.respondPermission(reqId, JSON.stringify({behavior:"allow"}))
+                                                } else if (k === "deny") {
+                                                    bridge.respondPermission(reqId, JSON.stringify({behavior:"deny"}))
+                                                } else if (k === "choice") {
+                                                    if (itemCol._multiSelect) {
+                                                        // 多选：切换选中态，不立即提交
+                                                        var cur = itemCol.selectedValues.slice()
+                                                        var idx = cur.indexOf(btn.label)
+                                                        if (idx >= 0) cur.splice(idx, 1)
+                                                        else cur.push(btn.label)
+                                                        itemCol.selectedValues = cur
+                                                    } else {
+                                                        var orig = itemCol.modelData.tool_input_brief || {}
+                                                        var updated = JSON.parse(JSON.stringify(orig))
+                                                        if (!updated.answers) updated.answers = {}
+                                                        updated.answers[btn.question || ""] = btn.value
+                                                        bridge.respondPermission(reqId, JSON.stringify({behavior:"allow", updatedInput: updated}))
+                                                    }
+                                                } else if (k === "confirm") {
+                                                    if (itemCol.selectedValues.length === 0) return
+                                                    var origC = itemCol.modelData.tool_input_brief || {}
+                                                    var updatedC = JSON.parse(JSON.stringify(origC))
+                                                    if (!updatedC.answers) updatedC.answers = {}
+                                                    updatedC.answers[cardDelegate._questionText || ""] = itemCol.selectedValues.slice()
+                                                    bridge.respondPermission(reqId, JSON.stringify({behavior:"allow", updatedInput: updatedC}))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 自由输入行（elicitation 专属）
+                                Row {
+                                    visible: modelData.kind === "elicitation"
+                                    width: parent.width
+                                    spacing: Math.round(6 * island.sf)
+                                    Rectangle {
+                                        width: parent.width - sendBtn.width - parent.spacing
+                                        height: Math.round(30 * island.sf)
+                                        radius: Math.round(6 * island.sf)
+                                        color: "#0e1018"
+                                        border.color: inputField.activeFocus ? "#5e6678" : "#3a3f50"
+                                        border.width: 1
+                                        TextInput {
+                                            id: inputField
+                                            anchors.fill: parent
+                                            anchors.leftMargin: Math.round(10 * island.sf)
+                                            anchors.rightMargin: Math.round(10 * island.sf)
+                                            verticalAlignment: TextInput.AlignVCenter
+                                            color: "#e8eaf0"
+                                            font { family: "Microsoft YaHei UI"; pixelSize: Math.round(11 * island.sf) }
+                                            clip: true
+                                            selectByMouse: true
+                                            Component.onCompleted: {
+                                                var cached = island._inputCache[itemCol.reqId] || ""
+                                                if (cached.length > 0) {
+                                                    text = cached
+                                                    itemCol.inputText = cached
+                                                }
+                                            }
+                                            onTextChanged: {
+                                                itemCol.inputText = text
+                                                var c = island._inputCache
+                                                c[itemCol.reqId] = text
+                                                island._inputCache = c
+                                            }
+                                            // 输入框激活时阻止 leaveTimer 收起岛
+                                            onActiveFocusChanged: {
+                                                itemCol._inputIsFocused = activeFocus
+                                                if (activeFocus) island.pendingInputFocusCount += 1
+                                                else island.pendingInputFocusCount = Math.max(0, island.pendingInputFocusCount - 1)
+                                            }
+                                            onAccepted: {
+                                                if (itemCol.inputText.length === 0) return
+                                                var orig = itemCol.modelData.tool_input_brief || {}
+                                                var updated = JSON.parse(JSON.stringify(orig))
+                                                if (!updated.answers) updated.answers = {}
+                                                updated.answers[cardDelegate._questionText || ""] = itemCol.inputText
+                                                bridge.respondPermission(itemCol.reqId,
+                                                    JSON.stringify({behavior:"allow", updatedInput: updated}))
+                                                inputField.focus = false  // 释放焦点让岛能正常收起
+                                            }
+                                        }
+                                        Text {
+                                            anchors.fill: inputField
+                                            verticalAlignment: Text.AlignVCenter
+                                            // 输入框聚焦后立刻隐藏（不等用户敲第一个字），并放到底层避免覆盖用户输入
+                                            visible: inputField.text.length === 0 && !inputField.activeFocus
+                                            z: -1
+                                            text: "或自行输入回复…"
+                                            color: "#5e6678"
+                                            font { family: "Microsoft YaHei UI"; pixelSize: Math.round(11 * island.sf) }
+                                        }
+                                    }
+                                    Rectangle {
+                                        id: sendBtn
+                                        width: Math.round(56 * island.sf)
+                                        height: Math.round(30 * island.sf)
+                                        radius: Math.round(6 * island.sf)
+                                        color: itemCol.inputText.length > 0
+                                               ? (sendHover.hovered ? "#3a7fff" : "#2a5fcf")
+                                               : "#2a2f3d"
+                                        Behavior on color { ColorAnimation { duration: 100 } }
+                                        HoverHandler { id: sendHover }
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "发送"
+                                            color: itemCol.inputText.length > 0 ? "#ffffff" : "#5e6678"
+                                            font { family: "Microsoft YaHei UI"; pixelSize: Math.round(11 * island.sf); bold: true }
+                                        }
+                                        TapHandler {
+                                            enabled: itemCol.inputText.length > 0
+                                            gesturePolicy: TapHandler.WithinBounds
+                                            onTapped: {
+                                                var orig = itemCol.modelData.tool_input_brief || {}
+                                                var updated = JSON.parse(JSON.stringify(orig))
+                                                if (!updated.answers) updated.answers = {}
+                                                updated.answers[cardDelegate._questionText || ""] = itemCol.inputText
+                                                bridge.respondPermission(itemCol.reqId,
+                                                    JSON.stringify({behavior:"allow", updatedInput: updated}))
+                                                inputField.focus = false
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     }
                 }
             }

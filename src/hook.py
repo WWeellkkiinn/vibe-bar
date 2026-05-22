@@ -37,10 +37,11 @@ def debug_log(raw: str, payload: dict) -> None:
             "ppid": os.getppid(),
             "event": payload.get("hook_event_name", ""),
             "session_id": payload.get("session_id", ""),
-            "cwd": payload.get("cwd", ""),
-            "prompt": (payload.get("prompt", "") or "")[:200],
+            # 不记录 cwd / prompt / raw payload —— 含用户敏感信息且无大小上限。
+            # 时序排查靠 event + session_id + tool_name + 字段名清单 就够。
+            "tool_name": payload.get("tool_name", "") if isinstance(payload, dict) else "",
+            "prompt_len": len(payload.get("prompt") or "") if isinstance(payload, dict) else 0,
             "raw_keys": sorted(payload.keys()) if isinstance(payload, dict) else None,
-            "raw_sample": raw[:2000],
         }
         with DEBUG_LOG.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -237,6 +238,9 @@ def main() -> int:
                 if source_name == "codex":
                     sess["is_primary"] = True  # upgrade hidden CX to visible on real prompt
         elif event == "PermissionRequest":
+            # Fallback only. Primary path is the HTTP hook → permission_server.py.
+            # Claude Code prefers the type:"http" hook when both are registered,
+            # so this branch typically only fires if the HTTP server is down.
             sess["needs_attention"] = True
         elif event == "Notification":
             notif_type = (
@@ -281,12 +285,12 @@ def main() -> int:
             if agent_id:
                 active = [a for a in active if a.get("id") != agent_id]
             elif active:
+                # 没 agent_id 时只匹配同样没 id 的占位项；找不到就不动，
+                # 避免误删某个真实 subagent 的最后一项。count 漂移由 TTL 兜底清理。
                 for i in range(len(active) - 1, -1, -1):
                     if not active[i].get("id"):
                         active = active[:i] + active[i + 1:]
                         break
-                else:
-                    active = active[:-1]
             sess["active_subagent_ids"] = active
             sess["active_subagent_count"] = len(active)
         elif event == "PreToolUse" and payload.get("tool_name") == "Bash" and not payload.get("agent_id"):

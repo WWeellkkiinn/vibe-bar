@@ -15,6 +15,7 @@ from models import (
     FOUR_HOURS_SEC, IDLE_PURGE_SEC, STALE_RUNNING_SEC,
     load_ui_config, _save_card_order,
 )
+from permission_server import PermissionServer
 from win32 import (
     ensure_on_current_desktop, get_primary_work_area,
     GWL_EXSTYLE, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW,
@@ -49,11 +50,16 @@ class VibeBarApp:
         self._cmd_queue: queue.Queue = queue.Queue()
         self._state_queue: queue.Queue = queue.Queue(maxsize=1)
         self._stop_event = threading.Event()
+        self._wake_event = threading.Event()
 
         self.model = SessionsModel()
         self.bridge = IslandBridge(self.model, self._cmd_queue)
         self.bridge._island_w_logical = self._island_w
         self.bridge._island_h = self._collapsed_h
+
+        self.permission_server = PermissionServer(on_pending_change=self._on_perm_change)
+        self.permission_server.start()
+        self.bridge.set_permission_server(self.permission_server)
 
         self._last_finished_at: dict[str, str] = {}
         self._last_phys_wa = None
@@ -92,7 +98,16 @@ class VibeBarApp:
     def run(self) -> int:
         code = self.qt.exec()
         self._stop_event.set()
+        try:
+            self.permission_server.stop()
+        except Exception:
+            pass
         return code
+
+    def _on_perm_change(self) -> None:
+        # Called from PermissionServer HTTP handler thread — must NOT do file IO.
+        # Just wake the worker so it reads state.json on its own thread.
+        self._wake_event.set()
 
     # ── window setup ─────────────────────────────────────────────────────────
 
@@ -190,6 +205,52 @@ class VibeBarApp:
             order.extend(sids)
         order.extend(no_cwd)
 
+        # Attach pending permissions/elicitations/notifications to sessions.
+        try:
+            pending = self.permission_server.list_pending()
+        except Exception:
+            pending = []
+        pending_by_sid: dict[str, list[dict]] = {}
+        for p in pending:
+            psid = p.get("session_id") or ""
+            pending_by_sid.setdefault(psid, []).append(p)
+        # Stale pending 主动清理：Claude Code 可能不关闭 HTTP 连接，
+        # 但用户在终端已经答完后 hook.py 会因为 PostToolUse / PermissionDenied
+        # 把 needs_attention 清掉、并刷新 last_update。判定"pending 创建后又有新事件
+        # 且 attention=False"就视为该 pending 已被绕过，主动 resolve 让卡片切回紫。
+        for psid, plist in list(pending_by_sid.items()):
+            sess_for_pending = sessions.get(psid) or all_sessions.get(psid)
+            if not sess_for_pending:
+                continue
+            if sess_for_pending.get("needs_attention"):
+                continue
+            sess_last = str(sess_for_pending.get("last_update") or "")
+            if not sess_last:
+                continue
+            still: list[dict] = []
+            for p in plist:
+                created = str(p.get("created_at") or "")
+                try:
+                    # sess_last 是 hook.py 写的本地 naive ISO，created 是 server 写的 UTC aware ISO
+                    # 各自 .timestamp() 都按真实绝对时刻算 epoch，可直接相减
+                    last_ts = datetime.fromisoformat(sess_last).timestamp()
+                    created_ts = datetime.fromisoformat(created).timestamp() if created else last_ts
+                    if last_ts - created_ts > 3.0:
+                        self.permission_server.resolve(p["id"], {})
+                        continue
+                except Exception:
+                    pass
+                still.append(p)
+            if still:
+                pending_by_sid[psid] = still
+            else:
+                pending_by_sid.pop(psid, None)
+        for sid, s in sessions.items():
+            s["pending_permission"] = pending_by_sid.get(sid)
+        # 通知 QML 有多少 pending：>0 时禁止岛自动收起，避免输入到一半卡片消失
+        total_pending = sum(len(v) for v in pending_by_sid.values() if v)
+        self.bridge.set_pending_count(total_pending)
+
         if not self.bridge._is_dragging:
             self.model.update_sessions(sessions, order)
             if not self._initial_order_restored and sessions:
@@ -265,7 +326,10 @@ class VibeBarApp:
                 except Exception: pass
                 startup_done = True
 
-            if now - last_state >= 0.25:
+            woken = self._wake_event.is_set()
+            if woken:
+                self._wake_event.clear()
+            if woken or now - last_state >= 0.25:
                 try:
                     s = read_state()
                     try: self._state_queue.get_nowait()
@@ -275,7 +339,12 @@ class VibeBarApp:
                     pass
                 last_state = now
 
-            self._stop_event.wait(0.1)
+            # Sleep up to 0.1s, but wake immediately on perm change or stop.
+            if self._wake_event.wait(0.1):
+                # don't clear here; loop top handles it
+                pass
+            if self._stop_event.is_set():
+                break
 
     def _worker_follow_desktop(self) -> None:
         own = self._own_hwnd

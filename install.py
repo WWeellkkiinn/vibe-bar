@@ -113,14 +113,63 @@ def _inject_events(hooks_root: dict, events: dict, hook_cmd: str, timeout: int =
         hooks_root[event] = cleaned
 
 
+# Notification 不走 HTTP hook：server 那边只是 204，重复且与 hook.py 的命令 hook 重叠。
+# Elicitation 走 HTTP，但实测 Claude Code AskUserQuestion 经 PermissionRequest 通道下发，
+# 所以 Elicitation hook 主要给未来兼容用，保留无害。
+_HTTP_EVENT_ENDPOINTS = {
+    "PermissionRequest": "permission",
+    "Elicitation": "elicitation",
+}
+_HTTP_PATHS = {"/permission", "/elicitation", "/notification"}  # 含 /notification 以便清理旧 entry
+SERVER_PORT = 19847  # 固定端口，与 permission_server.py 的 preferred_port 必须一致
+
+
+def _is_vibe_http_entry(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    for h in entry.get("hooks", []) or []:
+        if not isinstance(h, dict) or h.get("type") != "http":
+            continue
+        url = h.get("url", "")
+        if not isinstance(url, str) or not url.startswith("http://127.0.0.1:"):
+            continue
+        path = url.split("/", 3)[-1] if url.count("/") >= 3 else ""
+        if "/" + path in _HTTP_PATHS:
+            return True
+    return False
+
+
+def _inject_http_hooks(claude_settings: dict, port: int) -> None:
+    hooks_root = claude_settings.setdefault("hooks", {})
+    for event, endpoint in _HTTP_EVENT_ENDPOINTS.items():
+        existing = hooks_root.get(event, [])
+        if not isinstance(existing, list):
+            existing = []
+        cleaned = [g for g in existing if not _is_vibe_http_entry(g)]
+        cleaned.append({
+            "matcher": "",
+            "hooks": [{"type": "http", "url": f"http://127.0.0.1:{port}/{endpoint}", "timeout": 600}],
+        })
+        hooks_root[event] = cleaned
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    """Write content via tmp + os.replace so a crash can't leave a half file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def inject_hooks(python_path: str) -> None:
     data = _load_hooks_json(SETTINGS_PATH)
     hooks_root = data.setdefault("hooks", {})
     py = str(python_path).replace("\\", "/")
     _inject_events(hooks_root, HOOK_EVENTS, f'"{py}" "{HOOK_SCRIPT_POSIX}"')
-    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    _inject_http_hooks(data, SERVER_PORT)
+    _atomic_write(SETTINGS_PATH, json.dumps(data, ensure_ascii=False, indent=2))
     print(f"[ok] hooks injected: {SETTINGS_PATH}")
+    print(f"[ok] Injected HTTP hooks for PermissionRequest/Elicitation → 127.0.0.1:{SERVER_PORT}")
 
 
 def inject_codex_hooks(python_path: str) -> None:
@@ -135,8 +184,7 @@ def inject_codex_hooks(python_path: str) -> None:
 
     hooks_root = data.setdefault("hooks", {})
     _inject_events(hooks_root, CODEX_HOOK_EVENTS, hook_cmd, timeout=5)
-    CODEX_HOOKS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CODEX_HOOKS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    _atomic_write(CODEX_HOOKS_PATH, json.dumps(data, ensure_ascii=False, indent=2))
     print(f"[ok] codex hooks injected: {CODEX_HOOKS_PATH}")
 
     # Ensure codex_hooks = true in config.toml at top level (create file if missing)
@@ -149,8 +197,7 @@ def inject_codex_hooks(python_path: str) -> None:
         config = re.sub(r"(?m)^[ \t]*codex_hooks\s*=.*\n?", "", config)
         # Prepend to top level (before first [section])
         config = "codex_hooks = true\n" + config
-    CODEX_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CODEX_CONFIG_PATH.write_text(config, encoding="utf-8")
+    _atomic_write(CODEX_CONFIG_PATH, config)
     print(f"[ok] codex config updated: {CODEX_CONFIG_PATH}")
 
 
