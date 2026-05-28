@@ -101,6 +101,20 @@ def _rel_time(iso_ts: str, status: str, prompt_at: str) -> str:
 def _is_background(sess: dict) -> bool:
     return sess.get("active_subagent_count", 0) > 0 or bool(sess.get("active_bash"))
 
+
+def _active_agents_label(sess: dict) -> str:
+    counts: dict = {}
+    for a in sess.get("active_subagent_ids") or []:
+        t = (a.get("type") if isinstance(a, dict) else "") or "agent"
+        counts[t] = counts.get(t, 0) + 1
+    return ", ".join(f"{t} ×{n}" if n > 1 else t for t, n in counts.items())
+
+
+def _task_progress_label(sess: dict) -> str:
+    # task_ids holds only in-progress tasks (completed ones are removed in hook.py).
+    n = len(sess.get("task_ids") or [])
+    return f"{n} 个任务进行中" if n > 0 else ""
+
 def _dot_color(sess: dict) -> str:
     if sess.get("needs_attention"): return ATTENTION_COLOR
     if sess.get("status") == STATUS_RUNNING: return RUNNING_COLOR
@@ -123,6 +137,9 @@ class SessionsModel(QAbstractListModel):
     IsBackgroundRole = Qt.ItemDataRole.UserRole + 11
     SourceRole       = Qt.ItemDataRole.UserRole + 12
     PendingPermissionRole = Qt.ItemDataRole.UserRole + 13
+    ActiveAgentsRole = Qt.ItemDataRole.UserRole + 14
+    CompactingRole   = Qt.ItemDataRole.UserRole + 15
+    TaskProgressRole = Qt.ItemDataRole.UserRole + 16
 
     countChanged = pyqtSignal()
 
@@ -154,6 +171,9 @@ class SessionsModel(QAbstractListModel):
             self.IsBackgroundRole: b"isBackground",
             self.SourceRole:       b"source",
             self.PendingPermissionRole: b"pendingPermission",
+            self.ActiveAgentsRole: b"activeAgents",
+            self.CompactingRole:   b"compacting",
+            self.TaskProgressRole: b"taskProgress",
         }
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
@@ -174,6 +194,9 @@ class SessionsModel(QAbstractListModel):
         if role == self.IsBackgroundRole: return _is_background(s)
         if role == self.SourceRole:       return s.get("source", "claude")
         if role == self.PendingPermissionRole: return s.get("pending_permission")
+        if role == self.ActiveAgentsRole: return _active_agents_label(s)
+        if role == self.CompactingRole:   return bool(s.get("compacting"))
+        if role == self.TaskProgressRole: return _task_progress_label(s)
         return None
 
     # Map field name → list of role ints affected when that field changes.
@@ -193,9 +216,12 @@ class SessionsModel(QAbstractListModel):
             "prompt_at":             [cls.ElapsedRole],
             "needs_attention":       [cls.IsAttentionRole, cls.DotColorRole],
             "active_subagent_count": [cls.IsBackgroundRole, cls.DotColorRole],
+            "active_subagent_ids":   [cls.IsBackgroundRole, cls.DotColorRole, cls.ActiveAgentsRole],
             "active_bash":           [cls.IsBackgroundRole, cls.DotColorRole],
             "source":                [cls.SourceRole],
             "pending_permission":    [cls.PendingPermissionRole],
+            "compacting":            [cls.CompactingRole],
+            "task_ids":              [cls.TaskProgressRole],
         }
         cls._FIELD_ROLE_MAP = m
         return m
@@ -303,14 +329,17 @@ class SessionsModel(QAbstractListModel):
         return list(self._order)
 
     def get_cwd_order(self) -> list:
+        # Keyed by display name (cwd_name), not full path: a project spanning
+        # multiple cwd paths (root + subdir) is one pinnable group.
         seen: set = set()
         order: list = []
         for sid in self._order:
-            cwd = str(self._rows.get(sid, {}).get("cwd") or "")
-            if not cwd or cwd in seen:
+            s = self._rows.get(sid, {})
+            key = s.get("cwd_name") or Path(s.get("cwd", "")).name or ""
+            if not key or key in seen:
                 continue
-            seen.add(cwd)
-            order.append(cwd)
+            seen.add(key)
+            order.append(key)
         return order
 
     def reorder(self, from_idx: int, to_idx: int) -> None:

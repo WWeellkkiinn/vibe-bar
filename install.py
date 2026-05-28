@@ -45,6 +45,10 @@ HOOK_EVENTS = {
     "Notification":      {},
     "SubagentStart":     {},
     "SubagentStop":      {},
+    "PreCompact":        {},
+    "PostCompact":       {},
+    "TaskCreated":       {},
+    "TaskCompleted":     {},
 }
 
 _SENTINEL = ("VibeBar", "vibebar", "hook.py")

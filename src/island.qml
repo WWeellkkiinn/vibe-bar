@@ -174,6 +174,7 @@ Window {
             Row {
                 id: dotRow
                 anchors.centerIn: parent
+                height: island.collapsedH
                 spacing: Math.round(8 * island.sf)
 
                 Rectangle {
@@ -285,15 +286,22 @@ Window {
                     required property bool   isRunning
                     required property bool   isAttention
                     required property bool   isBackground
+                    required property bool   compacting
+                    required property string activeAgents
+                    required property string taskProgress
                     required property string bgColor
                     required property string source
                     required property int    index
                     required property var    pendingPermission
 
+                    readonly property string _statusLine: compacting ? "压缩上下文中…"
+                                                   : (isRunning && taskProgress.length > 0 ? taskProgress
+                                                   : (activeAgents.length > 0 ? "Running: " + activeAgents
+                                                   : lastPrompt))
                     readonly property bool _hasPending: pendingPermission !== null
                                                      && pendingPermission !== undefined
                                                      && pendingPermission.length > 0
-                    property int _pendingExtra: _hasPending && island.expanded
+                    property int _pendingExtra: _hasPending
                                                 ? Math.round(10 * island.sf) + pendingCol.implicitHeight
                                                 : 0
                     readonly property var _firstPending: _hasPending ? pendingPermission[0] : null
@@ -470,6 +478,7 @@ Window {
                                 top: parent.top; topMargin: Math.round(14 * island.sf)
                             }
                             text: cwdName
+                            textFormat: Text.PlainText
                             color: "#f2f4f8"
                             font { family: "Microsoft YaHei UI"; pixelSize: Math.round(13 * island.sf); bold: true }
                             elide: Text.ElideRight
@@ -481,7 +490,8 @@ Window {
                                 right: closeBtn.left; rightMargin: Math.round(6 * island.sf)
                                 top: parent.top; topMargin: Math.round(island.cardH - 26 * island.sf)
                             }
-                            text: lastPrompt
+                            text: cardDelegate._statusLine
+                            textFormat: Text.PlainText
                             color: "#9aa3b5"
                             font { family: "Microsoft YaHei UI"; pixelSize: Math.round(11 * island.sf) }
                             elide: Text.ElideRight
@@ -532,7 +542,10 @@ Window {
                         // ── Pending 区：cardVisual 内部，cardH 下方 ──
                         Column {
                             id: pendingCol
-                            visible: island.expanded && cardDelegate._hasPending
+                            visible: cardDelegate._hasPending
+                            height: (island.expanded || island.height > island.collapsedH) ? implicitHeight : 0
+                            clip: true
+                            enabled: island.expanded || island.height > island.collapsedH
                             anchors {
                                 left: parent.left; right: parent.right
                                 top: parent.top; topMargin: island.cardH
@@ -567,6 +580,7 @@ Window {
                                     spacing: Math.round(6 * island.sf)
                                     Text {
                                         text: modelData.tool_name && modelData.tool_name.length > 0 ? modelData.tool_name : "(tool)"
+                                        textFormat: Text.PlainText
                                         color: "#e8eaf0"
                                         font { family: "Microsoft YaHei UI"; pixelSize: Math.round(11 * island.sf); bold: true }
                                     }
@@ -598,6 +612,7 @@ Window {
                                         var s = JSON.stringify(b)
                                         return s.length > 160 ? s.substring(0, 160) + "…" : s
                                     }
+                                    textFormat: Text.PlainText
                                     color: modelData.kind === "elicitation" ? "#f2f4f8" : "#cbd0db"
                                     font {
                                         family: modelData.kind === "elicitation" ? "Microsoft YaHei UI" : "Consolas"
@@ -687,6 +702,7 @@ Window {
                                                     text: _isConfirm
                                                           ? ("确认 (" + itemCol.selectedValues.length + ")")
                                                           : btn.label
+                                                    textFormat: Text.PlainText
                                                     color: "#ffffff"
                                                     font { family: "Microsoft YaHei UI"; pixelSize: Math.round(11 * island.sf); bold: true }
                                                     elide: Text.ElideRight
@@ -695,6 +711,7 @@ Window {
                                                     width: parent.width
                                                     visible: btn.desc && btn.desc.length > 0
                                                     text: btn.desc
+                                                    textFormat: Text.PlainText
                                                     color: "#cfd3de"
                                                     font { family: "Microsoft YaHei UI"; pixelSize: Math.round(10 * island.sf) }
                                                     wrapMode: Text.Wrap

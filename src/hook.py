@@ -15,6 +15,9 @@ from pathlib import Path
 STATE_PATH = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "VibeBar" / "state.json"
 LOCK_PATH = STATE_PATH.with_suffix(".lock")
 DEBUG_LOG = STATE_PATH.parent / "hook-debug.log"
+DEBUG_LOG_MAX_BYTES = 5 * 1024 * 1024  # rotate to .1 past this, keeping ~10MB total
+MAX_TASK_IDS = 200                      # cap in-progress task ids per session (DoS guard)
+MAX_AGENT_TYPE_LEN = 40                 # cap untrusted agent_type before storing/display
 LOCK_ACQUIRE_TIMEOUT_SEC = 0.3
 LOCK_STALE_AGE_SEC = 5.0
 STALE_RUNNING_THRESHOLD_SEC = 600   # 10 min — non-primary sessions that stop sending hooks
@@ -26,6 +29,16 @@ ORPHAN_SUBAGENT_TTL = STALE_RUNNING_THRESHOLD_SEC  # align with non-primary stal
 
 def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _rotate_debug_log() -> None:
+    # Caller must hold the state lock — serializing rotation across concurrent
+    # hook processes prevents two of them racing to replace .log.1.
+    try:
+        if DEBUG_LOG.stat().st_size > DEBUG_LOG_MAX_BYTES:
+            DEBUG_LOG.replace(DEBUG_LOG.with_suffix(".log.1"))
+    except (FileNotFoundError, OSError):
+        pass
 
 
 def debug_log(raw: str, payload: dict) -> None:
@@ -63,6 +76,7 @@ def cleanup_stale_sessions(state: dict) -> None:
         if sess.get("status") == "running" and age > stale_thresh:
             sess["status"] = "idle"
             sess.pop("needs_attention", None)
+            sess.pop("compacting", None)
             if not sess.get("finished_at"):
                 sess["finished_at"] = sess.get("last_update")
         elif sess.get("status") == "idle" and age > STALE_IDLE_PURGE_SEC:
@@ -164,6 +178,7 @@ def main() -> int:
             print('{"continue": true}')
         return 0
     try:
+        _rotate_debug_log()
         state = load_state()
         cleanup_stale_sessions(state)
         sessions = state.setdefault("sessions", {})
@@ -219,6 +234,8 @@ def main() -> int:
                 sess["is_primary"] = False
         elif event == "UserPromptSubmit":
             sess.pop("user_closed", None)
+            sess.pop("compacting", None)
+            sess["task_ids"] = []
             sess["needs_attention"] = False
             sess["status"] = "running"
             cutoff = (datetime.now() - timedelta(seconds=ORPHAN_SUBAGENT_TTL)).isoformat(timespec="seconds")
@@ -251,6 +268,20 @@ def main() -> int:
             )
             if notif_type.strip() == "permission_prompt":
                 sess["needs_attention"] = True
+        elif event == "PreCompact":
+            sess["compacting"] = True
+        elif event == "PostCompact":
+            sess.pop("compacting", None)
+        elif event == "TaskCreated":
+            tid = str(payload.get("task_id") or "")
+            ids = sess.setdefault("task_ids", [])
+            if tid and tid not in ids and len(ids) < MAX_TASK_IDS:
+                ids.append(tid)
+        elif event == "TaskCompleted":
+            tid = str(payload.get("task_id") or "")
+            ids = sess.get("task_ids")
+            if tid and ids and tid in ids:
+                ids.remove(tid)
         elif event == "SessionEnd":
             sessions.pop(sid, None)
         elif event == "CwdChanged":
@@ -262,20 +293,21 @@ def main() -> int:
             sess["status"] = "idle"
             sess["finished_at"] = _now_iso()
             sess["active_bash"] = False
+            sess.pop("compacting", None)
             # Do NOT reset active_subagent_count here — SubagentStart/SubagentStop own it.
             # Resetting here caused a brief green flash before SubagentStart could fire.
             sess["needs_attention"] = False
         elif event == "SubagentStart" and source_name != "codex":
             agent_id = payload.get("agent_id", "")
+            agent_type = str(payload.get("agent_type", ""))[:MAX_AGENT_TYPE_LEN]
             active = sess.setdefault("active_subagent_ids", [])
             if agent_id:
                 if not any(a.get("id") == agent_id for a in active):
-                    active.append({"id": agent_id, "ts": _now_iso()})
+                    active.append({"id": agent_id, "ts": _now_iso(), "type": agent_type})
             else:
-                active.append({"id": "", "ts": _now_iso()})
+                active.append({"id": "", "ts": _now_iso(), "type": agent_type})
             sess["active_subagent_count"] = len(active)
             # Pre-announce rescue: record pending entry so Codex SessionStart can self-identify
-            agent_type = str(payload.get("agent_type", ""))
             if "codex" in agent_type.lower() and cwd:
                 pending = state.setdefault("_pending_rescues", [])
                 pending.append({"ts": _now_iso(), "cwd": cwd, "parent_sid": sid})

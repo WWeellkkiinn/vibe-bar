@@ -188,9 +188,10 @@ class VibeBarApp:
         grouped: dict = {}
         no_cwd: list = []
         for sid in sid_order:
-            cwd = str(sessions[sid].get("cwd") or "")
-            if cwd:
-                grouped.setdefault(cwd, []).append(sid)
+            s = sessions[sid]
+            key = s.get("cwd_name") or Path(str(s.get("cwd") or "")).name or ""
+            if key:
+                grouped.setdefault(key, []).append(sid)
             else:
                 no_cwd.append(sid)
 
