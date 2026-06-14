@@ -270,9 +270,25 @@ Window {
                 clip: true
                 model: sessionsModel
 
+                // 让离屏 delegate 也保持实例化，使拖拽开始时 itemAtIndex 能拿到真实高度（含审批卡的 _pendingExtra）
+                cacheBuffer: Math.round(2000 * island.sf)
+
                 property real dragComp: 0
                 property int  dragSlot: -1
                 property bool cardHorzDragging: false
+                // 拖拽开始时一次性快照（红色审批卡片高于普通卡，slot 高度不一）：
+                // 判槽只用这份固定快照（原始顺序 + 原始中心），避免随 swap 变动的动态顺序造成来回振荡。
+                property var  dragH0: []        // 原始顺序各 slot 高度
+                property var  dragCenter0: []   // 原始布局各 slot 中心 y
+                property int  dragStart: -1     // 被拖卡片的起始槽
+                property real dragDh: 0         // 被拖卡片高度
+                property real dragStartTop: 0   // 被拖卡片起始顶部 y
+
+                function _slotTop(arr, k) {
+                    var s = 0
+                    for (var i = 0; i < k && i < arr.length; i++) s += arr[i]
+                    return s
+                }
 
                 // ── Card delegate ─────────────────────────────────────────────
                 delegate: Item {
@@ -389,6 +405,19 @@ Window {
                                     _mode = 0
                                     cardsList.dragSlot = index
                                     cardsList.dragComp = 0
+                                    var H0 = []
+                                    for (var i = 0; i < sessionsModel.sessionCount; i++) {
+                                        var it = cardsList.itemAtIndex(i)
+                                        H0.push(it ? it.height : island.slotH)
+                                    }
+                                    var c0 = []
+                                    var acc = 0
+                                    for (var j = 0; j < H0.length; j++) { c0.push(acc + H0[j] / 2); acc += H0[j] }
+                                    cardsList.dragH0 = H0
+                                    cardsList.dragCenter0 = c0
+                                    cardsList.dragStart = index
+                                    cardsList.dragDh = H0[index]
+                                    cardsList.dragStartTop = cardsList._slotTop(H0, index)
                                 } else {
                                     if (_mode === 1) bridge.endIslandDrag()
                                     cardsList.dragSlot = -1
@@ -409,14 +438,27 @@ Window {
                                     bridge.moveIslandX()
                                 } else {
                                     if (cardsList.dragSlot < 0) return
-                                    var visualY = cardsList.dragSlot * island.slotH + activeTranslation.y + cardsList.dragComp
-                                    var newSlot = Math.max(0, Math.min(sessionsModel.sessionCount - 1,
-                                                                       Math.round(visualY / island.slotH)))
-                                    if (newSlot !== cardsList.dragSlot) {
-                                        cardsList.dragComp += (cardsList.dragSlot - newSlot) * island.slotH
-                                        bridge.moveSessionByIndex(cardsList.dragSlot, newSlot)
-                                        cardsList.dragSlot = newSlot
+                                    var H0 = cardsList.dragH0
+                                    var c0 = cardsList.dragCenter0
+                                    if (!H0 || H0.length === 0) return
+                                    var start = cardsList.dragStart
+                                    var dh = cardsList.dragDh
+                                    // 被拖卡片中心始终跟随手指（稳定参考系）；目标槽 = 其上方应有多少张"其他卡"。
+                                    // 紧凑布局：被拖卡片排除在累加之外，其下方卡片统一上移 dh —— 阈值单调，不振荡。
+                                    var cf = cardsList.dragStartTop + dh / 2 + activeTranslation.y
+                                    var t = 0
+                                    var aboveH = 0
+                                    for (var i = 0; i < H0.length; i++) {
+                                        if (i === start) continue
+                                        var ec = c0[i] - (i > start ? dh : 0)
+                                        if (ec < cf) { t++; aboveH += H0[i] }
                                     }
+                                    if (t !== cardsList.dragSlot) {
+                                        bridge.moveSessionByIndex(cardsList.dragSlot, t)
+                                        cardsList.dragSlot = t
+                                    }
+                                    // 补偿：渲染顶 = 当前槽真实顶部(aboveH) + activeTranslation.y + dragComp = dragStartTop + activeTranslation.y
+                                    cardsList.dragComp = cardsList.dragStartTop - aboveH
                                 }
                             }
                         }
