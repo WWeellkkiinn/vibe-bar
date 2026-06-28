@@ -109,9 +109,19 @@ def load_state() -> dict:
 
 def save_state(state: dict) -> None:
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = STATE_PATH.with_suffix(".tmp")
+    # 每进程唯一临时名：多个 CC 会话的 hook 并发时不再互踩同一个 state.tmp
+    tmp = STATE_PATH.with_suffix(f".{os.getpid()}.tmp")
     tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(STATE_PATH)
+    # os.replace 目标被并发读取/杀软扫描占用时 Windows 偶发 WinError 5 → 短重试；状态是 best-effort UI，重试仍败就放弃不报错
+    for attempt in range(5):
+        try:
+            tmp.replace(STATE_PATH)
+            return
+        except PermissionError:
+            if attempt == 4:
+                tmp.unlink(missing_ok=True)
+                return
+            time.sleep(0.05)
 
 
 def acquire_lock(timeout: float = LOCK_ACQUIRE_TIMEOUT_SEC) -> int | None:
@@ -133,11 +143,12 @@ def acquire_lock(timeout: float = LOCK_ACQUIRE_TIMEOUT_SEC) -> int | None:
 
 
 def release_lock(fd: int | None) -> None:
-    if fd is not None:
-        try:
-            os.close(fd)
-        except Exception:
-            pass
+    if fd is None:
+        return                          # 没拿到锁（超时无锁运行）就别删别人正持有的锁——崩溃的锁交给 stale 回收兜底
+    try:
+        os.close(fd)
+    except Exception:
+        pass
     LOCK_PATH.unlink(missing_ok=True)
 
 
