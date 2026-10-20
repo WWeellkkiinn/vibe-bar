@@ -24,3 +24,6 @@ vibebar.vbs
 
 # Local test / stress scripts
 test_*.py
+
+# 2026-10-20 浏览器工具会话缓存（截图/页面快照/日志），临时产物不进 git
+.playwright-mcp/
